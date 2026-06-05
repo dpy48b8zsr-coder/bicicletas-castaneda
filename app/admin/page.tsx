@@ -950,21 +950,21 @@ function PosPage() {
             {!cargando && resultados.length === 0 && busqueda.trim() === "" && !categoriaActiva && !filtroStockBajo && <div className="text-center py-16 text-gray-500"><p className="text-4xl mb-3">🔎</p><p className="text-lg">Busca un producto o selecciona una categoría</p></div>}
             {!cargando && resultados.length === 0 && (busqueda.trim() !== "" || categoriaActiva || filtroStockBajo) && <div className="text-center py-12 text-gray-800">No se encontraron productos.</div>}
             {resultados.length > 0 && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+              <div className="grid grid-cols-3 gap-4">
                 {resultados.map(producto => (
-                  <div key={producto.id} className="bg-white rounded-xl shadow-sm border border-gray-200 hover:shadow-md hover:border-green-300 transition-all duration-200 flex flex-col">
-                    <div className="h-40 bg-gray-100 rounded-t-xl flex items-center justify-center overflow-hidden">
-                      {producto.imagen_url ? <img src={producto.imagen_url} alt={producto.nombre} className="h-full w-full object-cover" /> : <span className="text-4xl text-gray-300">📷</span>}
-                    </div>
-                    <div className="p-4 flex flex-col flex-1">
-                      <h3 className="font-semibold text-gray-900 text-base leading-tight truncate">{producto.nombre}</h3>
-                      <div className="mt-2 flex items-center justify-between">
-                        <span className="text-xl font-bold text-green-600">${producto.precio.toFixed(2)}</span>
-                        <span className={`text-sm font-medium ${producto.stock > 5 ? "text-green-600" : producto.stock > 0 ? "text-orange-600" : "text-red-600"}`}>Stock: {producto.stock}</span>
-                      </div>
-                      <button onClick={() => agregarAlCarrito(producto)} disabled={producto.stock === 0} className={`mt-3 w-full py-2.5 rounded-lg font-medium text-sm transition ${producto.stock === 0 ? "bg-gray-200 text-gray-500 cursor-not-allowed" : "bg-green-600 hover:bg-green-700 text-white shadow-sm"}`}>{producto.stock === 0 ? "Agotado" : "Agregar al carrito"}</button>
-                    </div>
-                  </div>
+                  <div key={producto.id} className="bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md hover:border-green-300 transition-all duration-200 flex flex-col">
+  <div className="h-24 bg-gray-100 rounded-t-lg flex items-center justify-center overflow-hidden">
+    {producto.imagen_url ? <img src={producto.imagen_url} alt={producto.nombre} className="h-full w-full object-cover" /> : <span className="text-lg text-gray-300">📷</span>}
+  </div>
+  <div className="p-2.5 flex flex-col flex-1">
+    <h3 className="font-medium text-gray-900 text-sm leading-tight truncate">{producto.nombre}</h3>
+    <div className="mt-1.5 flex items-center justify-between">
+      <span className="text-base font-bold text-green-600">${producto.precio.toFixed(2)}</span>
+      <span className={`text-xs font-medium ${producto.stock > 5 ? "text-green-600" : producto.stock > 0 ? "text-orange-600" : "text-red-600"}`}>Stock: {producto.stock}</span>
+    </div>
+    <button onClick={() => agregarAlCarrito(producto)} disabled={producto.stock === 0} className={`mt-2 w-full py-1.5 rounded-md font-medium text-xs transition ${producto.stock === 0 ? "bg-gray-200 text-gray-500 cursor-not-allowed" : "bg-green-600 hover:bg-green-700 text-white shadow-sm"}`}>{producto.stock === 0 ? "Agotado" : "Agregar al carrito"}</button>
+  </div>
+</div>
                 ))}
               </div>
             )}
