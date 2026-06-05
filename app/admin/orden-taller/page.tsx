@@ -46,7 +46,6 @@ interface Orden {
 
 const ESTADOS = ["pendiente", "en_proceso", "lista_para_entrega", "entregada", "facturada"];
 
-// Mapeo de estados Orden -> Cita
 const mapearEstadoOrdenACita = (estadoOrden: string): string | null => {
   const mapa: Record<string, string> = {
     pendiente: "en_diagnostico",
@@ -72,7 +71,6 @@ function OrdenTallerPage() {
   const [productos, setProductos] = useState<ProductoInventario[]>([]);
   const [cargando, setCargando] = useState(false);
 
-  // Modal
   const [mostrarForm, setMostrarForm] = useState(false);
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [clienteId, setClienteId] = useState<string>("");
@@ -82,11 +80,9 @@ function OrdenTallerPage() {
   const [lineas, setLineas] = useState<LineaOrden[]>([]);
   const [guardando, setGuardando] = useState(false);
 
-  // Buscador de productos
   const [busquedaProducto, setBusquedaProducto] = useState("");
   const [resultadosBusqueda, setResultadosBusqueda] = useState<ProductoInventario[]>([]);
 
-  // Crear cliente al vuelo
   const [mostrarNuevoCliente, setMostrarNuevoCliente] = useState(false);
   const [nuevoNombreCliente, setNuevoNombreCliente] = useState("");
   const [nuevoTelefonoCliente, setNuevoTelefonoCliente] = useState("");
@@ -125,7 +121,6 @@ function OrdenTallerPage() {
     cargarDatos();
   }, [sucursalId]);
 
-  // Precargar desde cita si viene en la URL
   useEffect(() => {
     if (!citaIdParam) return;
     const precargarDesdeCita = async () => {
@@ -135,7 +130,6 @@ function OrdenTallerPage() {
         .eq("id", citaIdParam)
         .single();
       if (!cita) return;
-
       setClienteId(cita.cliente_id || "");
       setNotas(cita.descripcion_problema || "");
       setCitaId(cita.id);
@@ -151,7 +145,6 @@ function OrdenTallerPage() {
     precargarDesdeCita();
   }, [citaIdParam]);
 
-  // Búsqueda de productos
   useEffect(() => {
     const buscar = async () => {
       if (busquedaProducto.trim() === "") {
@@ -438,16 +431,11 @@ function OrdenTallerPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl md:text-3xl font-bold text-gray-900">🔧 Órdenes de Taller</h1>
-        <button
-          onClick={abrirNueva}
-          className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm transition"
-        >
-          + Nueva Orden
-        </button>
+        <button onClick={abrirNueva} className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm transition">+ Nueva Orden</button>
       </div>
 
-      {/* Lista de órdenes */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+      {/* Tabla en escritorio */}
+      <div className="hidden md:block bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         {cargando ? (
           <p className="p-4 text-gray-800">Cargando órdenes...</p>
         ) : ordenes.length === 0 ? (
@@ -491,12 +479,7 @@ function OrdenTallerPage() {
                           {ESTADOS.map(e => <option key={e} value={e}>{e.replace(/_/g, " ")}</option>)}
                         </select>
                         {o.estado !== "facturada" && (
-                          <button
-                            onClick={() => convertirEnVenta(o)}
-                            className="text-purple-600 hover:text-purple-800 text-xs font-bold underline"
-                          >
-                            Convertir en venta
-                          </button>
+                          <button onClick={() => convertirEnVenta(o)} className="text-purple-600 hover:text-purple-800 text-xs font-bold underline">Convertir en venta</button>
                         )}
                       </div>
                     </td>
@@ -508,7 +491,51 @@ function OrdenTallerPage() {
         )}
       </div>
 
-      {/* Modal formulario */}
+      {/* Tarjetas en móvil */}
+      <div className="md:hidden space-y-3">
+        {cargando ? (
+          <p className="text-center text-gray-800 py-12">Cargando órdenes...</p>
+        ) : ordenes.length === 0 ? (
+          <p className="text-center text-gray-800 py-12">No hay órdenes de taller.</p>
+        ) : (
+          ordenes.map(o => (
+            <div key={o.id} className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+              <div className="flex justify-between items-start">
+                <div>
+                  <h3 className="font-semibold text-gray-900">{o.clientes?.nombre || "Sin cliente"}</h3>
+                  <p className="text-xs text-gray-500">{o.cita_id ? `Cita #${o.cita_id.slice(0, 8)}` : "Sin cita"}</p>
+                </div>
+                <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+                  o.estado === "pendiente" ? "bg-yellow-100 text-yellow-900" :
+                  o.estado === "en_proceso" ? "bg-blue-100 text-blue-900" :
+                  o.estado === "lista_para_entrega" ? "bg-green-100 text-green-900" :
+                  o.estado === "entregada" ? "bg-purple-100 text-purple-900" :
+                  "bg-gray-100 text-gray-900"
+                }`}>{o.estado.replace(/_/g, " ")}</span>
+              </div>
+              <div className="mt-2 flex items-center justify-between">
+                <span className="text-lg font-bold text-green-700">${o.total.toFixed(2)}</span>
+                <div className="flex gap-2 flex-wrap">
+                  <button onClick={() => abrirEditar(o)} className="text-blue-600 text-xs font-medium underline">Editar</button>
+                  <button onClick={() => descargarPDF(o)} className="text-gray-600 text-xs font-medium underline">PDF</button>
+                  <select
+                    value={o.estado}
+                    onChange={(e) => cambiarEstado(o.id, e.target.value, o.cita_id)}
+                    className="text-xs border border-gray-300 rounded px-1 py-0.5 text-gray-900 bg-white"
+                  >
+                    {ESTADOS.map(e => <option key={e} value={e}>{e.replace(/_/g, " ")}</option>)}
+                  </select>
+                  {o.estado !== "facturada" && (
+                    <button onClick={() => convertirEnVenta(o)} className="text-purple-600 text-xs font-bold underline">Convertir en venta</button>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* Modal formulario (se mantiene igual) */}
       {mostrarForm && (
         <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-3xl border border-gray-200 max-h-[90vh] overflow-y-auto">
@@ -524,47 +551,14 @@ function OrdenTallerPage() {
                   {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
                 </select>
                 {!mostrarNuevoCliente ? (
-                  <button
-                    type="button"
-                    onClick={() => setMostrarNuevoCliente(true)}
-                    className="text-green-600 text-xs font-medium hover:underline mt-1"
-                  >
-                    + Nuevo cliente
-                  </button>
+                  <button type="button" onClick={() => setMostrarNuevoCliente(true)} className="text-green-600 text-xs font-medium hover:underline mt-1">+ Nuevo cliente</button>
                 ) : (
                   <div className="mt-2 space-y-2 bg-gray-50 p-3 rounded-lg">
-                    <input
-                      type="text"
-                      placeholder="Nombre del cliente"
-                      value={nuevoNombreCliente}
-                      onChange={(e) => setNuevoNombreCliente(e.target.value)}
-                      className="w-full border border-gray-300 rounded px-2 py-1 text-sm text-gray-900 placeholder-gray-500"
-                    />
-                    <input
-                      type="text"
-                      placeholder="Teléfono (opcional)"
-                      value={nuevoTelefonoCliente}
-                      onChange={(e) => setNuevoTelefonoCliente(e.target.value)}
-                      className="w-full border border-gray-300 rounded px-2 py-1 text-sm text-gray-900 placeholder-gray-500"
-                    />
+                    <input type="text" placeholder="Nombre del cliente" value={nuevoNombreCliente} onChange={(e) => setNuevoNombreCliente(e.target.value)} className="w-full border border-gray-300 rounded px-2 py-1 text-sm text-gray-900 placeholder-gray-500" />
+                    <input type="text" placeholder="Teléfono (opcional)" value={nuevoTelefonoCliente} onChange={(e) => setNuevoTelefonoCliente(e.target.value)} className="w-full border border-gray-300 rounded px-2 py-1 text-sm text-gray-900 placeholder-gray-500" />
                     <div className="flex gap-2">
-                      <button
-                        onClick={crearClienteRapido}
-                        disabled={!nuevoNombreCliente.trim()}
-                        className="bg-green-600 text-white px-3 py-1 rounded text-xs hover:bg-green-700 disabled:opacity-50"
-                      >
-                        Guardar cliente
-                      </button>
-                      <button
-                        onClick={() => {
-                          setMostrarNuevoCliente(false);
-                          setNuevoNombreCliente("");
-                          setNuevoTelefonoCliente("");
-                        }}
-                        className="text-gray-500 text-xs hover:underline"
-                      >
-                        Cancelar
-                      </button>
+                      <button onClick={crearClienteRapido} disabled={!nuevoNombreCliente.trim()} className="bg-green-600 text-white px-3 py-1 rounded text-xs hover:bg-green-700 disabled:opacity-50">Guardar cliente</button>
+                      <button onClick={() => { setMostrarNuevoCliente(false); setNuevoNombreCliente(""); setNuevoTelefonoCliente(""); }} className="text-gray-500 text-xs hover:underline">Cancelar</button>
                     </div>
                   </div>
                 )}
@@ -574,9 +568,7 @@ function OrdenTallerPage() {
                 <select value={citaId} onChange={(e) => setCitaId(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white text-gray-900">
                   <option value="">-- Sin cita --</option>
                   {citas.map(c => (
-                    <option key={c.id} value={c.id}>
-                      {new Date(c.fecha_hora).toLocaleString("es-MX")} - {c.clientes?.nombre || "—"}
-                    </option>
+                    <option key={c.id} value={c.id}>{new Date(c.fecha_hora).toLocaleString("es-MX")} - {c.clientes?.nombre || "—"}</option>
                   ))}
                 </select>
               </div>
@@ -591,30 +583,18 @@ function OrdenTallerPage() {
 
             <div className="mb-4">
               <label className="block text-sm font-semibold text-gray-900 mb-1">Agregar repuesto del inventario</label>
-              <input
-                type="text"
-                value={busquedaProducto}
-                onChange={(e) => setBusquedaProducto(e.target.value)}
-                placeholder="Buscar por nombre, SKU o código..."
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 placeholder-gray-500"
-              />
+              <input type="text" value={busquedaProducto} onChange={(e) => setBusquedaProducto(e.target.value)} placeholder="Buscar por nombre, SKU o código..." className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 placeholder-gray-500" />
               {resultadosBusqueda.length > 0 && (
                 <ul className="border border-gray-200 rounded-lg mt-1 max-h-32 overflow-y-auto bg-white shadow-sm">
                   {resultadosBusqueda.map(prod => (
-                    <li
-                      key={prod.id}
-                      onClick={() => agregarLineaProducto(prod)}
-                      className="px-3 py-2 hover:bg-green-50 cursor-pointer text-sm flex justify-between items-center"
-                    >
+                    <li key={prod.id} onClick={() => agregarLineaProducto(prod)} className="px-3 py-2 hover:bg-green-50 cursor-pointer text-sm flex justify-between items-center">
                       <span className="text-gray-900 font-medium">{prod.nombre}</span>
                       <span className="text-green-700 font-semibold">${prod.precio.toFixed(2)} (Stock: {prod.stock})</span>
                     </li>
                   ))}
                 </ul>
               )}
-              <button type="button" onClick={agregarLineaManual} className="text-green-600 text-xs font-medium hover:underline mt-1">
-                + Agregar servicio manual
-              </button>
+              <button type="button" onClick={agregarLineaManual} className="text-green-600 text-xs font-medium hover:underline mt-1">+ Agregar servicio manual</button>
             </div>
 
             <div className="mb-4">
@@ -623,28 +603,10 @@ function OrdenTallerPage() {
                 {lineas.map((linea, index) => (
                   <div key={index} className="flex items-center gap-2 bg-gray-50 p-2 rounded-lg">
                     <div className="flex-1">
-                      <input
-                        type="text"
-                        value={linea.descripcion}
-                        onChange={(e) => actualizarLinea(index, "descripcion", e.target.value)}
-                        placeholder="Descripción"
-                        className="w-full border border-gray-300 rounded px-2 py-1 text-xs text-gray-900"
-                      />
+                      <input type="text" value={linea.descripcion} onChange={(e) => actualizarLinea(index, "descripcion", e.target.value)} placeholder="Descripción" className="w-full border border-gray-300 rounded px-2 py-1 text-xs text-gray-900" />
                     </div>
-                    <input
-                      type="number"
-                      min="1"
-                      value={linea.cantidad}
-                      onChange={(e) => actualizarLinea(index, "cantidad", parseInt(e.target.value) || 1)}
-                      className="w-16 border border-gray-300 rounded px-2 py-1 text-xs text-gray-900"
-                    />
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      value={linea.precio_unitario}
-                      onChange={(e) => { const val = parseFloat(e.target.value) || 0; actualizarLinea(index, "precio_unitario", val); }}
-                      className="w-24 border border-gray-300 rounded px-2 py-1 text-xs text-gray-900"
-                    />
+                    <input type="number" min="1" value={linea.cantidad} onChange={(e) => actualizarLinea(index, "cantidad", parseInt(e.target.value) || 1)} className="w-16 border border-gray-300 rounded px-2 py-1 text-xs text-gray-900" />
+                    <input type="text" inputMode="decimal" value={linea.precio_unitario} onChange={(e) => { const val = parseFloat(e.target.value) || 0; actualizarLinea(index, "precio_unitario", val); }} className="w-24 border border-gray-300 rounded px-2 py-1 text-xs text-gray-900" />
                     <span className="text-xs text-gray-700 font-semibold w-20 text-right">${(linea.cantidad * linea.precio_unitario).toFixed(2)}</span>
                     <button onClick={() => eliminarLinea(index)} className="text-red-500 hover:text-red-700 text-sm">✕</button>
                   </div>
@@ -659,20 +621,12 @@ function OrdenTallerPage() {
 
             <div className="mb-4">
               <label className="block text-sm font-semibold text-gray-900 mb-1">Notas</label>
-              <textarea
-                value={notas}
-                onChange={(e) => setNotas(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900"
-                rows={2}
-                placeholder="Observaciones..."
-              />
+              <textarea value={notas} onChange={(e) => setNotas(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900" rows={2} placeholder="Observaciones..." />
             </div>
 
             <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 mt-4">
               <button onClick={() => setMostrarForm(false)} className="px-5 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg font-medium transition">Cancelar</button>
-              <button onClick={guardarOrden} disabled={guardando} className="px-5 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold shadow-sm transition disabled:opacity-50">
-                {guardando ? "Guardando..." : editandoId ? "Actualizar" : "Crear Orden"}
-              </button>
+              <button onClick={guardarOrden} disabled={guardando} className="px-5 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold shadow-sm transition disabled:opacity-50">{guardando ? "Guardando..." : editandoId ? "Actualizar" : "Crear Orden"}</button>
             </div>
           </div>
         </div>
@@ -681,7 +635,6 @@ function OrdenTallerPage() {
   );
 }
 
-// Envolver en Suspense para usar useSearchParams
 export default function OrdenTallerPageWrapper() {
   return (
     <Suspense fallback={<div className="p-8 text-center text-gray-500">Cargando...</div>}>

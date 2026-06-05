@@ -89,6 +89,7 @@ export default function ProductosPage() {
     cargarDatos();
   }, [sucursalId]);
 
+  // Filtrado y ordenación
   const productosFiltrados = useMemo(() => {
     let lista = productos.filter((p) => {
       const matchNombre = p.nombre.toLowerCase().includes(busqueda.toLowerCase());
@@ -389,8 +390,8 @@ export default function ProductosPage() {
         </div>
       </div>
 
-      {/* Tabla de productos */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+      {/* Tabla de productos (escritorio) */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hidden md:block">
         {cargando ? (
           <p className="p-4 text-gray-800">Cargando productos...</p>
         ) : productosFiltrados.length === 0 ? (
@@ -470,6 +471,44 @@ export default function ProductosPage() {
               </tbody>
             </table>
           </div>
+        )}
+      </div>
+
+      {/* Tarjetas (móvil) */}
+      <div className="md:hidden space-y-3">
+        {cargando ? (
+          <p className="text-center text-gray-800 py-12">Cargando productos...</p>
+        ) : productosFiltrados.length === 0 ? (
+          <p className="text-center text-gray-800 py-12">No se encontraron productos.</p>
+        ) : (
+          productosFiltrados.map((producto) => (
+            <div key={producto.id} className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+              <div className="flex gap-3">
+                <div className="flex-shrink-0">
+                  {producto.imagen_url ? (
+                    <img src={producto.imagen_url} alt={producto.nombre} className="h-16 w-16 object-cover rounded-lg" />
+                  ) : (
+                    <div className="h-16 w-16 bg-gray-200 rounded-lg flex items-center justify-center text-gray-400 text-sm">Sin img</div>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-semibold text-gray-900 truncate">{producto.nombre}</h3>
+                  <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-600">
+                    <span>SKU: {producto.sku || "—"}</span>
+                    <span>C. Barras: {producto.codigo_barras || "—"}</span>
+                    <span className="font-medium text-green-700">${producto.precio.toFixed(2)}</span>
+                    <span>Costo: ${(producto.costo || 0).toFixed(2)}</span>
+                    <span className={`font-medium ${producto.stock > 5 ? "text-green-600" : producto.stock > 0 ? "text-orange-600" : "text-red-600"}`}>Stock: {producto.stock}</span>
+                    <span>Categoría: {categorias.find(c => c.id === producto.categoria_id)?.nombre || "—"}</span>
+                  </div>
+                  <div className="flex gap-2 mt-2">
+                    <button onClick={() => abrirEditar(producto)} className="text-blue-600 text-xs font-medium underline">Editar</button>
+                    <button onClick={() => setEliminandoId(producto.id)} className="text-red-600 text-xs font-medium underline">Eliminar</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))
         )}
       </div>
 

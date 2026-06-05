@@ -51,7 +51,6 @@ export default function PedidosOnlinePage() {
     router.push("/admin?pedido_online=true");
   };
 
-  // Función para obtener los items como array
   const obtenerItems = (pedido: PedidoOnline): any[] => {
     if (!pedido.items) return [];
     if (Array.isArray(pedido.items)) return pedido.items;
@@ -69,7 +68,8 @@ export default function PedidosOnlinePage() {
         <h1 className="text-2xl md:text-3xl font-bold text-gray-900">🛍️ Pedidos Online</h1>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+      {/* Tabla en escritorio */}
+      <div className="hidden md:block bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         {cargando ? (
           <p className="p-4 text-gray-800">Cargando pedidos...</p>
         ) : pedidos.length === 0 ? (
@@ -138,6 +138,58 @@ export default function PedidosOnlinePage() {
               </tbody>
             </table>
           </div>
+        )}
+      </div>
+
+      {/* Tarjetas en móvil */}
+      <div className="md:hidden space-y-3">
+        {cargando ? (
+          <p className="text-center text-gray-800 py-12">Cargando pedidos...</p>
+        ) : pedidos.length === 0 ? (
+          <p className="text-center text-gray-800 py-12">No hay pedidos online.</p>
+        ) : (
+          pedidos.map(p => {
+            const items = obtenerItems(p);
+            return (
+              <div key={p.id} className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h3 className="font-semibold text-gray-900">{p.cliente_nombre || "Sin nombre"}</h3>
+                    <p className="text-xs text-gray-500">{p.cliente_telefono || "Sin teléfono"}</p>
+                    <p className="text-xs text-gray-500">{new Date(p.created_at).toLocaleString("es-MX")}</p>
+                  </div>
+                  <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+                    p.estado === "pendiente" ? "bg-yellow-100 text-yellow-900" :
+                    p.estado === "confirmado" ? "bg-blue-100 text-blue-900" :
+                    p.estado === "en_preparacion" ? "bg-purple-100 text-purple-900" :
+                    p.estado === "listo" ? "bg-green-100 text-green-900" :
+                    p.estado === "entregado" ? "bg-gray-100 text-gray-900" :
+                    "bg-red-100 text-red-900"
+                  }`}>{p.estado.replace(/_/g, " ")}</span>
+                </div>
+                <div className="mt-2">
+                  {items.slice(0, 3).map((item: any, idx: number) => (
+                    <p key={idx} className="text-xs text-gray-700">{item.nombre} x{item.cantidad}</p>
+                  ))}
+                  {items.length > 3 && <p className="text-xs text-gray-400">...y {items.length - 3} más</p>}
+                  {items.length === 0 && <p className="text-xs text-gray-400">—</p>}
+                </div>
+                <div className="mt-2 flex items-center justify-between">
+                  <span className="text-lg font-bold text-green-700">${p.total?.toFixed(2) || "0.00"}</span>
+                  <div className="flex gap-2">
+                    <select
+                      value={p.estado}
+                      onChange={(e) => cambiarEstado(p.id, e.target.value)}
+                      className="text-xs border border-gray-300 rounded px-1 py-0.5 text-gray-900 bg-white"
+                    >
+                      {ESTADOS.map(e => <option key={e} value={e}>{e.replace(/_/g, " ")}</option>)}
+                    </select>
+                    <button onClick={() => convertirEnVenta(p)} className="text-purple-600 text-xs font-bold underline">Convertir en venta</button>
+                  </div>
+                </div>
+              </div>
+            );
+          })
         )}
       </div>
     </div>

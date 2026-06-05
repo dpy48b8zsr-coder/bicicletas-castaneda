@@ -142,8 +142,8 @@ export default function SolicitudesPage() {
         </button>
       </div>
 
-      {/* Tabla de solicitudes */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+      {/* Tabla en escritorio */}
+      <div className="hidden md:block bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         {cargando ? (
           <p className="p-4 text-gray-800">Cargando...</p>
         ) : solicitudes.length === 0 ? (
@@ -215,6 +215,47 @@ export default function SolicitudesPage() {
               </tbody>
             </table>
           </div>
+        )}
+      </div>
+
+      {/* Tarjetas en móvil */}
+      <div className="md:hidden space-y-3">
+        {cargando ? (
+          <p className="text-center text-gray-800 py-12">Cargando...</p>
+        ) : solicitudes.length === 0 ? (
+          <p className="text-center text-gray-800 py-12">No hay solicitudes pendientes.</p>
+        ) : (
+          solicitudes.map((s) => (
+            <div key={s.id} className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+              <div className="flex justify-between items-start">
+                <div>
+                  <h3 className="font-semibold text-gray-900">{s.cliente_nombre}</h3>
+                  <p className="text-xs text-gray-500">{s.cliente_telefono || "Sin teléfono"}</p>
+                  <p className="text-xs text-gray-500">{new Date(s.created_at).toLocaleDateString("es-MX")}</p>
+                </div>
+                <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+                  s.estado === "pendiente" ? "bg-yellow-100 text-yellow-900" :
+                  s.estado === "notificado" ? "bg-green-100 text-green-900" :
+                  "bg-gray-100 text-gray-900"
+                }`}>{s.estado}</span>
+              </div>
+              <p className="mt-2 text-sm text-gray-900 font-medium">{s.producto_solicitado}</p>
+              <div className="flex gap-2 mt-3 flex-wrap">
+                <button onClick={() => notificarCliente(s)} className="text-green-600 text-xs font-medium underline">Notificar</button>
+                <button onClick={() => abrirEditar(s)} className="text-blue-600 text-xs font-medium underline">Editar</button>
+                <select
+                  value={s.estado}
+                  onChange={(e) => cambiarEstado(s.id, e.target.value)}
+                  className="text-xs border border-gray-300 rounded px-1 py-0.5 text-gray-900 bg-white"
+                >
+                  <option value="pendiente">Pendiente</option>
+                  <option value="notificado">Notificado</option>
+                  <option value="cancelado">Cancelado</option>
+                </select>
+                <button onClick={() => eliminarSolicitud(s.id)} className="text-red-600 text-xs font-medium underline">Eliminar</button>
+              </div>
+            </div>
+          ))
         )}
       </div>
 

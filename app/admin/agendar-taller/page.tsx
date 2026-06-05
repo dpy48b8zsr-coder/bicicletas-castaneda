@@ -3,6 +3,7 @@
 
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
+import { useBranch } from "@/context/BranchContext";
 
 // Interfaces
 interface Cliente {
@@ -42,6 +43,9 @@ interface LineaOrden {
 const ESTADOS = ["agendada", "en_diagnostico", "esperando_repuestos", "en_reparacion", "lista_para_entrega", "entregada"];
 
 export default function AgendarTallerPage() {
+  const { sucursalActiva } = useBranch();
+  const sucursalId = sucursalActiva?.id;
+
   // Datos principales
   const [citas, setCitas] = useState<Cita[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
@@ -94,11 +98,15 @@ export default function AgendarTallerPage() {
     ] = await Promise.all([
       supabase.from("citas_taller")
         .select("*, clientes(nombre)")
+        .eq("sucursal_id", sucursalId)
         .gte("fecha_hora", inicio)
         .lte("fecha_hora", fin)
         .order("fecha_hora", { ascending: true }),
       supabase.from("clientes").select("id, nombre").order("nombre"),
-      supabase.from("productos").select("id, nombre, precio, stock").order("nombre"),
+      supabase.from("productos")
+        .select("id, nombre, precio, stock")
+        .eq("sucursal_id", sucursalId)
+        .order("nombre"),
     ]);
 
     if (citasData) setCitas(citasData);
@@ -109,7 +117,7 @@ export default function AgendarTallerPage() {
 
   useEffect(() => {
     cargarDatos();
-  }, [filtroFecha]);
+  }, [filtroFecha, sucursalId]);
 
   // --- Lógica de citas (crear/editar/eliminar) ---
   const abrirNueva = () => {
@@ -159,7 +167,7 @@ export default function AgendarTallerPage() {
     setMostrarForm(true);
   };
 
-  // Crear cliente nuevo desde el modal
+  // Crear cliente rápido desde el modal
   const crearClienteRapido = async () => {
     if (!nuevoNombreCliente.trim()) return;
     const { data, error } = await supabase
@@ -198,6 +206,7 @@ export default function AgendarTallerPage() {
       descripcion_problema: formData.descripcion_problema.trim() || null,
       diagnostico: formData.diagnostico.trim() || null,
       notas: formData.notas.trim() || null,
+      sucursal_id: sucursalId,
     };
 
     setGuardando(true);
@@ -234,6 +243,7 @@ export default function AgendarTallerPage() {
     setMostrarPanelOrden(true);
   };
 
+  // Búsqueda de productos mientras se escribe (filtrada por sucursal)
   useEffect(() => {
     if (!mostrarPanelOrden) return;
     const buscar = async () => {
@@ -245,13 +255,14 @@ export default function AgendarTallerPage() {
       const { data } = await supabase
         .from("productos")
         .select("id, nombre, precio, stock")
+        .eq("sucursal_id", sucursalId)
         .or(`nombre.ilike.${term},sku.ilike.${term},codigo_barras.ilike.${term}`)
         .limit(5);
       if (data) setResultadosBusqueda(data);
     };
     const timer = setTimeout(buscar, 200);
     return () => clearTimeout(timer);
-  }, [busquedaProducto, mostrarPanelOrden]);
+  }, [busquedaProducto, mostrarPanelOrden, sucursalId]);
 
   const agregarLineaProducto = (prod: ProductoInventario) => {
     setLineas(prev => [...prev, {
@@ -305,6 +316,7 @@ export default function AgendarTallerPage() {
         estado: "pendiente",
         total: totalOrden,
         notas: citaPanel.descripcion_problema || "",
+        sucursal_id: sucursalId,
       })
       .select("id")
       .single();
@@ -368,63 +380,104 @@ export default function AgendarTallerPage() {
         ) : citas.length === 0 ? (
           <p className="p-4 text-gray-800">No hay citas para esta fecha.</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b border-gray-200">
-                <tr>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-900">Hora</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-900">Cliente</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-900">Bicicleta</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-900">Problema</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-900">Estado</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-900">Acciones</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {citas.map((cita) => (
-                  <tr key={cita.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 text-gray-900 font-medium">
-                      {new Date(cita.fecha_hora).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })} ({cita.duracion_min} min)
-                    </td>
-                    <td className="px-4 py-3 text-gray-900">{cita.clientes?.nombre || "—"}</td>
-                    <td className="px-4 py-3 text-gray-700">
-                      {cita.marca ? `${cita.marca} ${cita.modelo || ""} (${cita.numero_serie || "s/n"})` : "—"}
-                    </td>
-                    <td className="px-4 py-3 text-gray-700 max-w-[200px] truncate">{cita.descripcion_problema || "—"}</td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${
-                        cita.estado === "agendada" ? "bg-blue-100 text-blue-900" :
-                        cita.estado === "en_diagnostico" ? "bg-yellow-100 text-yellow-900" :
-                        cita.estado === "esperando_repuestos" ? "bg-orange-100 text-orange-900" :
-                        cita.estado === "en_reparacion" ? "bg-purple-100 text-purple-900" :
-                        cita.estado === "lista_para_entrega" ? "bg-green-100 text-green-900" :
-                        "bg-gray-100 text-gray-900"
-                      }`}>{cita.estado.replace(/_/g, " ")}</span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex gap-2 flex-wrap items-center">
-                        <button onClick={() => abrirEditar(cita)} className="text-blue-600 hover:text-blue-800 text-xs font-medium underline">Editar</button>
-                        <select
-                          value={cita.estado}
-                          onChange={(e) => cambiarEstadoCita(cita.id, e.target.value)}
-                          className="text-xs border border-gray-300 rounded px-1 py-0.5 text-gray-900 bg-white"
-                        >
-                          {ESTADOS.map(e => <option key={e} value={e} className="text-gray-900">{e.replace(/_/g, " ")}</option>)}
-                        </select>
-                        <button
-                          onClick={() => abrirPanelOrden(cita)}
-                          className="text-green-600 hover:text-green-800 text-xs font-bold underline whitespace-nowrap"
-                        >
-                          🔧 Iniciar reparación
-                        </button>
-                        <button onClick={() => eliminarCita(cita.id)} className="text-red-600 hover:text-red-800 text-xs font-medium underline">Eliminar</button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <>
+  {/* Tabla en escritorio */}
+  <div className="hidden md:block overflow-x-auto">
+    <table className="w-full text-sm">
+      <thead className="bg-gray-50 border-b border-gray-200">
+        <tr>
+          <th className="px-4 py-3 text-left font-semibold text-gray-900">Hora</th>
+          <th className="px-4 py-3 text-left font-semibold text-gray-900">Cliente</th>
+          <th className="px-4 py-3 text-left font-semibold text-gray-900">Bicicleta</th>
+          <th className="px-4 py-3 text-left font-semibold text-gray-900">Problema</th>
+          <th className="px-4 py-3 text-left font-semibold text-gray-900">Estado</th>
+          <th className="px-4 py-3 text-left font-semibold text-gray-900">Acciones</th>
+        </tr>
+      </thead>
+      <tbody className="divide-y divide-gray-100">
+        {citas.map((cita) => (
+          <tr key={cita.id} className="hover:bg-gray-50">
+            <td className="px-4 py-3 text-gray-900 font-medium">
+              {new Date(cita.fecha_hora).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })} ({cita.duracion_min} min)
+            </td>
+            <td className="px-4 py-3 text-gray-900">{cita.clientes?.nombre || "—"}</td>
+            <td className="px-4 py-3 text-gray-700">
+              {cita.marca ? `${cita.marca} ${cita.modelo || ""} (${cita.numero_serie || "s/n"})` : "—"}
+            </td>
+            <td className="px-4 py-3 text-gray-700 max-w-[200px] truncate">{cita.descripcion_problema || "—"}</td>
+            <td className="px-4 py-3">
+              <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${
+                cita.estado === "agendada" ? "bg-blue-100 text-blue-900" :
+                cita.estado === "en_diagnostico" ? "bg-yellow-100 text-yellow-900" :
+                cita.estado === "esperando_repuestos" ? "bg-orange-100 text-orange-900" :
+                cita.estado === "en_reparacion" ? "bg-purple-100 text-purple-900" :
+                cita.estado === "lista_para_entrega" ? "bg-green-100 text-green-900" :
+                "bg-gray-100 text-gray-900"
+              }`}>{cita.estado.replace(/_/g, " ")}</span>
+            </td>
+            <td className="px-4 py-3">
+              <div className="flex gap-2 flex-wrap items-center">
+                <button onClick={() => abrirEditar(cita)} className="text-blue-600 hover:text-blue-800 text-xs font-medium underline">Editar</button>
+                <select
+                  value={cita.estado}
+                  onChange={(e) => cambiarEstadoCita(cita.id, e.target.value)}
+                  className="text-xs border border-gray-300 rounded px-1 py-0.5 text-gray-900 bg-white"
+                >
+                  {ESTADOS.map(e => <option key={e} value={e} className="text-gray-900">{e.replace(/_/g, " ")}</option>)}
+                </select>
+                <button
+                  onClick={() => abrirPanelOrden(cita)}
+                  className="text-green-600 hover:text-green-800 text-xs font-bold underline whitespace-nowrap"
+                >
+                  🔧 Iniciar reparación
+                </button>
+                <button onClick={() => eliminarCita(cita.id)} className="text-red-600 hover:text-red-800 text-xs font-medium underline">Eliminar</button>
+              </div>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+
+  {/* Tarjetas en móvil */}
+  <div className="md:hidden divide-y divide-gray-100">
+    {citas.map((cita) => (
+      <div key={cita.id} className="p-4">
+        <div className="flex justify-between items-start">
+          <div>
+            <h3 className="font-semibold text-gray-900">{cita.clientes?.nombre || "Sin cliente"}</h3>
+            <p className="text-xs text-gray-500">
+              {new Date(cita.fecha_hora).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })} ({cita.duracion_min} min)
+            </p>
+            {cita.marca && <p className="text-xs text-gray-500">{cita.marca} {cita.modelo || ""} ({cita.numero_serie || "s/n"})</p>}
+            {cita.descripcion_problema && <p className="text-xs text-gray-600 mt-1">{cita.descripcion_problema}</p>}
           </div>
+          <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+            cita.estado === "agendada" ? "bg-blue-100 text-blue-900" :
+            cita.estado === "en_diagnostico" ? "bg-yellow-100 text-yellow-900" :
+            cita.estado === "esperando_repuestos" ? "bg-orange-100 text-orange-900" :
+            cita.estado === "en_reparacion" ? "bg-purple-100 text-purple-900" :
+            cita.estado === "lista_para_entrega" ? "bg-green-100 text-green-900" :
+            "bg-gray-100 text-gray-900"
+          }`}>{cita.estado.replace(/_/g, " ")}</span>
+        </div>
+        <div className="flex gap-2 mt-3 flex-wrap">
+          <button onClick={() => abrirEditar(cita)} className="text-blue-600 text-xs font-medium underline">Editar</button>
+          <select
+            value={cita.estado}
+            onChange={(e) => cambiarEstadoCita(cita.id, e.target.value)}
+            className="text-xs border border-gray-300 rounded px-1 py-0.5 text-gray-900 bg-white"
+          >
+            {ESTADOS.map(e => <option key={e} value={e}>{e.replace(/_/g, " ")}</option>)}
+          </select>
+          <button onClick={() => abrirPanelOrden(cita)} className="text-green-600 text-xs font-bold underline">🔧 Iniciar reparación</button>
+          <button onClick={() => eliminarCita(cita.id)} className="text-red-600 text-xs font-medium underline">Eliminar</button>
+        </div>
+      </div>
+    ))}
+  </div>
+</>
         )}
       </div>
 
@@ -623,7 +676,7 @@ export default function AgendarTallerPage() {
         </div>
       )}
 
-      {/* Panel lateral para crear orden rápida (sin cambios) */}
+      {/* Panel lateral para crear orden rápida */}
       {mostrarPanelOrden && citaPanel && (
         <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex justify-end z-50">
           <div className="bg-white w-full max-w-lg h-full shadow-xl p-6 overflow-y-auto border-l border-gray-200">

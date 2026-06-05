@@ -152,37 +152,36 @@ export default function ClientesPage() {
     cargarClientes();
   };
 
-  // Abrir estado de cuenta (FILTRADO POR SUCURSAL)
+  // Abrir estado de cuenta
   const abrirEstadoCuenta = async (cliente: Cliente) => {
     setClienteSeleccionado(cliente);
     setMostrarEstadoCuenta(true);
 
-    // Ventas a crédito de la sucursal activa
-    const { data: ventasData } = await supabase
+    // Cargar ventas a crédito (método 'credito') de este cliente, filtradas por sucursal
+    let queryVentas = supabase
       .from("ventas")
       .select("id, total, created_at")
       .eq("cliente_id", cliente.id)
-      .eq("metodo_pago", "credito")
-      .eq("sucursal_id", sucursalId)
-      .order("created_at", { ascending: false });
-
+      .eq("metodo_pago", "credito");
+    if (sucursalId) queryVentas = queryVentas.eq("sucursal_id", sucursalId);
+    const { data: ventasData } = await queryVentas.order("created_at", { ascending: false });
     setVentasCredito(ventasData || []);
 
-    // Abonos de la sucursal activa
-    const { data: abonosData } = await supabase
+    // Cargar abonos, filtrados por sucursal
+    let queryAbonos = supabase
       .from("abonos_credito")
       .select("id, monto, motivo, metodo_pago, created_at")
-      .eq("cliente_id", cliente.id)
-      .eq("sucursal_id", sucursalId)
-      .order("created_at", { ascending: false });
-
+      .eq("cliente_id", cliente.id);
+    if (sucursalId) queryAbonos = queryAbonos.eq("sucursal_id", sucursalId);
+    const { data: abonosData } = await queryAbonos.order("created_at", { ascending: false });
     setAbonos(abonosData || []);
+
     setMontoAbono("");
     setMetodoAbono("efectivo");
     setMotivoAbono("Pago de crédito");
   };
 
-  // Registrar abono (con sucursal_id)
+  // Registrar abono
   const registrarAbono = async () => {
     if (!montoAbono || parseFloat(montoAbono) <= 0 || !clienteSeleccionado) return;
 
@@ -237,8 +236,8 @@ export default function ClientesPage() {
         />
       </div>
 
-      {/* Tabla */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+      {/* Tabla de clientes (escritorio) */}
+      <div className="hidden md:block bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         {cargando ? (
           <p className="p-4 text-gray-800">Cargando clientes...</p>
         ) : clientesFiltrados.length === 0 ? (
@@ -294,7 +293,32 @@ export default function ClientesPage() {
         )}
       </div>
 
-      {/* Modal formulario */}
+      {/* Tarjetas (móvil) */}
+      <div className="md:hidden space-y-3">
+        {cargando ? (
+          <p className="text-center text-gray-800 py-12">Cargando clientes...</p>
+        ) : clientesFiltrados.length === 0 ? (
+          <p className="text-center text-gray-800 py-12">No se encontraron clientes.</p>
+        ) : (
+          clientesFiltrados.map((cliente) => (
+            <div key={cliente.id} className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+              <h3 className="font-semibold text-gray-900">{cliente.nombre}</h3>
+              <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-600">
+                <span>📞 {cliente.telefono || "—"}</span>
+                <span>✉️ {cliente.email || "—"}</span>
+                <span className="font-bold text-green-700">{cliente.puntos} pts</span>
+              </div>
+              <div className="flex gap-2 mt-2">
+                <button onClick={() => abrirEstadoCuenta(cliente)} className="text-green-600 text-xs font-medium underline">Estado de cuenta</button>
+                <button onClick={() => abrirEditar(cliente)} className="text-blue-600 text-xs font-medium underline">Editar</button>
+                <button onClick={() => setEliminandoId(cliente.id)} className="text-red-600 text-xs font-medium underline">Eliminar</button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* Modal formulario (sin cambios) */}
       {mostrarFormulario && (
         <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md border border-gray-200 max-h-[90vh] overflow-y-auto">

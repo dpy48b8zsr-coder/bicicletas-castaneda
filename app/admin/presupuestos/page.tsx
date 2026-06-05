@@ -215,7 +215,8 @@ export default function PresupuestosPage() {
         </button>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+      {/* Tabla en escritorio */}
+      <div className="hidden md:block bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         {cargando ? (
           <p className="p-4 text-gray-800">Cargando...</p>
         ) : presupuestos.length === 0 ? (
@@ -269,7 +270,47 @@ export default function PresupuestosPage() {
         )}
       </div>
 
-      {/* Modal de formulario */}
+      {/* Tarjetas en móvil */}
+      <div className="md:hidden space-y-3">
+        {cargando ? (
+          <p className="text-center text-gray-800 py-12">Cargando...</p>
+        ) : presupuestos.length === 0 ? (
+          <p className="text-center text-gray-800 py-12">No hay presupuestos.</p>
+        ) : (
+          presupuestos.map(p => (
+            <div key={p.id} className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+              <div className="flex justify-between items-start">
+                <div>
+                  <h3 className="font-semibold text-gray-900">{p.clientes?.nombre || "Sin cliente"}</h3>
+                  <p className="text-xs text-gray-500">{new Date(p.created_at).toLocaleDateString("es-MX")}</p>
+                </div>
+                <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+                  p.estado === "pendiente" ? "bg-yellow-100 text-yellow-900" :
+                  p.estado === "aprobado" ? "bg-green-100 text-green-900" :
+                  "bg-red-100 text-red-900"
+                }`}>{p.estado}</span>
+              </div>
+              <div className="mt-2 flex items-center justify-between">
+                <span className="text-lg font-bold text-green-700">${p.total.toFixed(2)}</span>
+                <div className="flex gap-2">
+                  <button onClick={() => abrirEditar(p)} className="text-blue-600 text-xs font-medium underline">Editar</button>
+                  {p.estado === "pendiente" && (
+                    <>
+                      <button onClick={() => cambiarEstado(p.id, "aprobado")} className="text-green-600 text-xs font-medium underline">Aprobar</button>
+                      <button onClick={() => cambiarEstado(p.id, "rechazado")} className="text-red-600 text-xs font-medium underline">Rechazar</button>
+                    </>
+                  )}
+                  {p.estado === "aprobado" && (
+                    <button onClick={() => convertirEnVenta(p.id)} className="text-purple-600 text-xs font-bold underline">Convertir en venta</button>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* Modal de formulario (sin cambios) */}
       {mostrarForm && (
         <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-3xl border border-gray-200 max-h-[90vh] overflow-y-auto">
