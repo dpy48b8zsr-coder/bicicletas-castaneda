@@ -416,17 +416,17 @@ function OrdenTallerPage() {
       </html>
     `;
 
-    const ventana = window.open("", "_blank", "width=800,height=600");
+    const blob = new Blob([html], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    const ventana = window.open(url, "_blank");
     if (ventana) {
-      ventana.document.write(html);
-      ventana.document.close();
-      ventana.focus();
       ventana.onload = () => {
         ventana.print();
       };
+    } else {
+      alert("Permite las ventanas emergentes para imprimir la orden.");
     }
   };
-
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
