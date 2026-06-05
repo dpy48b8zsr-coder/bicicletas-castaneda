@@ -5,8 +5,9 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { VentaProvider } from "@/context/VentaContext";
-import { BranchProvider } from "@/context/BranchContext";
+import { BranchProvider, useBranch } from "@/context/BranchContext";
 
+// Definición de módulos (igual que antes)
 const allMenuItems = [
   { href: "/admin", label: "Venta", icon: "🛒", key: "venta" },
   { href: "/admin/historial", label: "Historial", icon: "📊", key: "historial" },
@@ -24,6 +25,35 @@ const allMenuItems = [
   { href: "/admin/configuracion", label: "Configuración", icon: "⚙️", key: "configuracion" },
 ];
 
+// Categorías del menú (cada una contiene varias keys de módulos)
+const menuCategories = [
+  {
+    label: "Ventas",
+    icon: "🛒",
+    keys: ["venta", "historial"],
+  },
+  {
+    label: "Inventario",
+    icon: "📦",
+    keys: ["productos", "inventario", "transferencias"],
+  },
+  {
+    label: "Clientes",
+    icon: "👥",
+    keys: ["clientes", "solicitudes", "pedidos_online"],
+  },
+  {
+    label: "Taller",
+    icon: "🔧",
+    keys: ["agendar_taller", "orden_taller", "presupuestos"],
+  },
+  {
+    label: "Administración",
+    icon: "⚙️",
+    keys: ["usuarios", "sucursales", "configuracion"],
+  },
+];
+
 const defaultPermissions = { venta: true, historial: true };
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -39,6 +69,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   // Estado para menú móvil
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // Estado para categorías expandidas (acordeón)
+  const [expandedCategories, setExpandedCategories] = useState<string[]>([]);
+
+  const toggleCategory = (label: string) => {
+    setExpandedCategories(prev =>
+      prev.includes(label) ? prev.filter(c => c !== label) : [...prev, label]
+    );
+  };
 
   useEffect(() => {
     const init = async () => {
@@ -127,6 +166,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   if (!session) return null;
 
+  // Filtrar módulos permitidos
   const menuItems = allMenuItems.filter(item => userPermissions[item.key]);
 
   const cambiarSucursal = (id: string) => {
@@ -142,6 +182,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     router.replace("/login");
   };
 
+  // Componente reutilizable para el contenido de la barra lateral
   const SidebarContent = ({ mobile = false }: { mobile?: boolean }) => (
     <>
       <div className="p-5 border-b border-gray-800">
@@ -167,22 +208,56 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       </div>
 
       <nav className="flex-1 overflow-y-auto py-4">
-        {menuItems.map((item) => {
-          const isActive = pathname === item.href;
+        {menuCategories.map(categoria => {
+          // Filtrar los módulos de esta categoría que están permitidos
+          const itemsCategoria = menuItems.filter(item => categoria.keys.includes(item.key));
+          if (itemsCategoria.length === 0) return null;
+
+          const isExpanded = expandedCategories.includes(categoria.label);
+
           return (
-            <Link
-              key={item.href}
-              href={item.href}
-              onClick={() => mobile && setMobileMenuOpen(false)}
-              className={`flex items-center gap-3 px-5 py-3 mx-2 rounded-lg text-sm font-medium transition-colors ${
-                isActive
-                  ? "bg-green-700 text-white shadow-md"
-                  : "text-gray-400 hover:bg-gray-800 hover:text-white"
-              }`}
-            >
-              <span className="text-lg">{item.icon}</span>
-              <span>{item.label}</span>
-            </Link>
+            <div key={categoria.label} className="mb-1">
+              <button
+                onClick={() => toggleCategory(categoria.label)}
+                className="w-full flex items-center justify-between px-5 py-2.5 text-sm font-medium text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg mx-2 transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-lg">{categoria.icon}</span>
+                  <span>{categoria.label}</span>
+                </div>
+                <svg
+                  className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+
+              {isExpanded && (
+                <div className="ml-8 mt-1 space-y-1">
+                  {itemsCategoria.map(item => {
+                    const isActive = pathname === item.href;
+                    return (
+                      <Link
+                        key={item.key}
+                        href={item.href}
+                        onClick={() => mobile && setMobileMenuOpen(false)}
+                        className={`flex items-center gap-3 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                          isActive
+                            ? "bg-green-700 text-white shadow-md"
+                            : "text-gray-400 hover:bg-gray-800 hover:text-white"
+                        }`}
+                      >
+                        <span className="text-lg">{item.icon}</span>
+                        <span>{item.label}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           );
         })}
       </nav>
