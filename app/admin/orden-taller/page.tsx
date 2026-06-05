@@ -416,17 +416,18 @@ function OrdenTallerPage() {
       </html>
     `;
 
+        // Crear un enlace temporal para descargar el archivo HTML
     const blob = new Blob([html], { type: "text/html" });
     const url = URL.createObjectURL(blob);
-    const ventana = window.open(url, "_blank");
-    if (ventana) {
-      ventana.onload = () => {
-        ventana.print();
-      };
-    } else {
-      alert("Permite las ventanas emergentes para imprimir la orden.");
-    }
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `Orden_Taller_${orden.id.slice(0, 8)}.html`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
