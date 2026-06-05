@@ -797,24 +797,25 @@ function PosPage() {
         <head>
           <meta charset="utf-8">
           <title>Ticket #${ticketData.ventaId.slice(0, 8)}</title>
-          <style>
+         <style>
   @page {
     size: 58mm auto;
     margin: 0;
   }
   body {
-    font-family: 'Courier New', monospace;
-    width: 58mm;
+    font-family: Arial, Helvetica, sans-serif;
+    width: 54mm;
     margin: 0 auto;
     padding: 2mm;
-    font-size: 10px;
+    font-size: 13px;
+    font-weight: normal;
   }
-  h2, p { margin: 2px 0; }
-  hr { border: 0; border-top: 1px dashed #000; margin: 3px 0; }
+  h2, p { margin: 3px 0; }
+  hr { border: 0; border-top: 1px dashed #000; margin: 4px 0; }
   @media print {
     body { 
       margin: 0; 
-      width: 58mm;
+      width: 54mm;
     }
   }
 </style>
