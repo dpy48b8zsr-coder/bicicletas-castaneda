@@ -653,19 +653,26 @@ export default function HistorialPage() {
           <meta charset="utf-8">
           <title>Ticket #${venta.id.slice(0, 8)}</title>
           <style>
-            body {
-              font-family: 'Courier New', monospace;
-              width: 80mm;
-              margin: 0 auto;
-              padding: 5mm;
-              font-size: 12px;
-            }
-            h2, p { margin: 4px 0; }
-            hr { border: 0; border-top: 1px dashed #000; margin: 6px 0; }
-            @media print {
-              body { margin: 0; }
-            }
-          </style>
+  @page {
+    size: 58mm auto;
+    margin: 0;
+  }
+  body {
+    font-family: 'Courier New', monospace;
+    width: 58mm;
+    margin: 0 auto;
+    padding: 2mm;
+    font-size: 10px;
+  }
+  h2, p { margin: 2px 0; }
+  hr { border: 0; border-top: 1px dashed #000; margin: 3px 0; }
+  @media print {
+    body { 
+      margin: 0; 
+      width: 58mm;
+    }
+  }
+</style>
         </head>
         <body>
           <h2 style="text-align: center;">Bicicletas Castañeda</h2>
