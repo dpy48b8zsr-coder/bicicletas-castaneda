@@ -773,7 +773,112 @@ function PosPage() {
     window.open(url, "_blank");
   };
 
-  const imprimirTicket = () => { window.print(); };
+  const imprimirTicket = () => {
+    if (!ticketData) return;
+
+    const lineasHTML = ticketData.items
+      .map(
+        (item) => `
+      <div style="display: flex; justify-content: space-between; font-size: 14px; padding: 2px 0;">
+        <span>${item.producto.nombre} x${item.cantidad}</span>
+        <span>$${(item.producto.precio * item.cantidad).toFixed(2)}</span>
+      </div>`
+      )
+      .join("");
+
+    const metodoPago = ticketData.metodoPago;
+    const sucursal = sucursalActiva?.nombre || "";
+    const taller = configTicket.nombre_taller || "Bicicletas Castañeda";
+    const direccion = configTicket.direccion || "";
+    const telefono = configTicket.telefono || "";
+
+    const html = `
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <title>Ticket #${ticketData.ventaId.slice(0, 8)}</title>
+          <style>
+            body {
+              font-family: 'Courier New', monospace;
+              width: 80mm;
+              margin: 0 auto;
+              padding: 5mm;
+              font-size: 12px;
+            }
+            h2, p { margin: 4px 0; }
+            hr { border: 0; border-top: 1px dashed #000; margin: 6px 0; }
+            @media print {
+              body { margin: 0; }
+            }
+          </style>
+        </head>
+        <body>
+          <h2 style="text-align: center;">${taller}</h2>
+          <p style="text-align: center; font-size: 12px;">${direccion}</p>
+          <p style="text-align: center; font-size: 12px;">${telefono}</p>
+          ${sucursal ? `<p style="text-align: center; font-size: 12px;">${sucursal}</p>` : ""}
+          <hr>
+          <p>Ticket #${ticketData.ventaId.slice(0, 8)}</p>
+          <p>${new Date(ticketData.fecha).toLocaleString("es-MX")}</p>
+          <hr>
+          ${lineasHTML}
+          ${
+            ticketData.descuentoPuntos > 0
+              ? `<div style="display: flex; justify-content: space-between; font-size: 14px; padding: 2px 0;">
+                  <span>Descuento puntos</span>
+                  <span>-$${ticketData.descuentoPuntos.toFixed(2)}</span>
+                </div>`
+              : ""
+          }
+          <hr>
+          <div style="display: flex; justify-content: space-between; font-size: 16px; font-weight: bold;">
+            <span>Total</span>
+            <span>$${ticketData.total.toFixed(2)}</span>
+          </div>
+          <p>Método: ${metodoPago}</p>
+          ${
+            ticketData.montoRecibido !== undefined
+              ? `<p>Recibido: $${ticketData.montoRecibido.toFixed(2)}</p>
+                 ${
+                   ticketData.cambio !== undefined && ticketData.cambio >= 0
+                     ? `<p>Cambio: $${ticketData.cambio.toFixed(2)}</p>`
+                     : ""
+                 }`
+              : ""
+          }
+          ${
+            ticketData.pagosParciales && ticketData.pagosParciales.length > 0
+              ? ticketData.pagosParciales
+                  .map((p) => `<p>${p.metodo}: $${p.monto.toFixed(2)}</p>`)
+                  .join("")
+              : ""
+          }
+          ${
+            ticketData.clienteId
+              ? `<p>Cliente: ${
+                  clientes.find((c) => c.id === ticketData.clienteId)?.nombre || "—"
+                }</p>`
+              : ""
+          }
+          ${ticketData.puntosGanados > 0 ? `<p>Puntos ganados: +${ticketData.puntosGanados}</p>` : ""}
+          ${ticketData.puntosCanjeados > 0 ? `<p>Puntos canjeados: -${ticketData.puntosCanjeados}</p>` : ""}
+          <hr>
+          <p style="text-align: center;">${configTicket.mensaje_ticket}</p>
+        </body>
+      </html>
+    `;
+
+    const blob = new Blob([html], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    const ventana = window.open(url, "_blank");
+    if (ventana) {
+      ventana.onload = () => {
+        ventana.print();
+      };
+    } else {
+      alert("Permite las ventanas emergentes para imprimir el ticket.");
+    }
+  };
 
   const agregarProductoComun = () => {
     if (!productoComunNombre.trim() || parseFloat(productoComunPrecio) <= 0) return;
