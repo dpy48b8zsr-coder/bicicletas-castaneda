@@ -807,7 +807,7 @@ function PosPage() {
     width: 54mm;
     margin: 0 auto;
     padding: 2mm;
-    font-size: 13px;
+    font-size: 16px;
     font-weight: normal;
   }
   h2, p { margin: 3px 0; }

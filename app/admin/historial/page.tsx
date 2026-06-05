@@ -16,6 +16,8 @@ import {
 } from "chart.js";
 import { Bar, Doughnut } from "react-chartjs-2";
 
+
+
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, ArcElement);
 
 // Función para rango local (sin cambios)
@@ -426,6 +428,22 @@ export default function HistorialPage() {
   const [ventas, setVentas] = useState<Venta[]>([]);
   const [cargando, setCargando] = useState(false);
   const [ticketReimpresion, setTicketReimpresion] = useState<any>(null);
+  const reimprimirTicket = async (venta: Venta) => {
+    if (venta.estado === "devuelta") return;
+    const { data: detalles, error } = await supabase
+      .from("detalle_venta")
+      .select("cantidad, precio_unitario, productos(nombre)")
+      .eq("venta_id", venta.id);
+    if (error || !detalles) { alert("No se pudieron cargar los detalles."); return; }
+    let clienteNombre = null; let clienteTelefono = null;
+    if (venta.cliente_id) {
+      const { data: clienteData } = await supabase.from("clientes").select("nombre, telefono").eq("id", venta.cliente_id).single();
+      if (clienteData) { clienteNombre = clienteData.nombre; clienteTelefono = clienteData.telefono; }
+    }
+    const descuentoPuntos = venta.puntos_canjeados ? venta.puntos_canjeados / 10 : 0;
+    setTicketReimpresion({ venta, detalles, clienteNombre, clienteTelefono, descuentoPuntos, sucursalNombre: sucursalActiva?.nombre });
+    setWhatsappReimpresion(clienteTelefono || "");
+  };
   const [whatsappReimpresion, setWhatsappReimpresion] = useState("");
   const [ventaDevolucion, setVentaDevolucion] = useState<Venta | null>(null);
 
@@ -443,6 +461,12 @@ export default function HistorialPage() {
 
   const [devolucionesCount, setDevolucionesCount] = useState(0);
   const [devolucionesTotal, setDevolucionesTotal] = useState(0);
+  const [configTicket, setConfigTicket] = useState({
+  nombre_taller: "Bicicletas Castañeda",
+  direccion: "",
+  telefono: "",
+  mensaje_ticket: "¡Gracias por tu compra!",
+});
 
   // Función actualizarPeriodo con hora local (ya corregida)
   const actualizarPeriodo = (nuevoPeriodo: string) => {
@@ -585,25 +609,20 @@ export default function HistorialPage() {
   };
 
   useEffect(() => {
-    cargarVentas();
-  }, [fechaInicio, fechaFin, sucursalId]);
-
-  const reimprimirTicket = async (venta: Venta) => {
-    if (venta.estado === "devuelta") return;
-    const { data: detalles, error } = await supabase
-      .from("detalle_venta")
-      .select("cantidad, precio_unitario, productos(nombre)")
-      .eq("venta_id", venta.id);
-    if (error || !detalles) { alert("No se pudieron cargar los detalles."); return; }
-    let clienteNombre = null; let clienteTelefono = null;
-    if (venta.cliente_id) {
-      const { data: clienteData } = await supabase.from("clientes").select("nombre, telefono").eq("id", venta.cliente_id).single();
-      if (clienteData) { clienteNombre = clienteData.nombre; clienteTelefono = clienteData.telefono; }
+  cargarVentas();
+  
+  // Cargar configuración de la tienda
+  supabase.from("configuracion").select("*").eq("id", 1).single().then(({ data }) => {
+    if (data) {
+      setConfigTicket({
+        nombre_taller: data.nombre_taller || "Bicicletas Castañeda",
+        direccion: data.direccion || "",
+        telefono: data.telefono || "",
+        mensaje_ticket: data.mensaje_ticket || "¡Gracias por tu compra!",
+      });
     }
-    const descuentoPuntos = venta.puntos_canjeados ? venta.puntos_canjeados / 10 : 0;
-    setTicketReimpresion({ venta, detalles, clienteNombre, clienteTelefono, descuentoPuntos, sucursalNombre: sucursalActiva?.nombre });
-    setWhatsappReimpresion(clienteTelefono || "");
-  };
+  });
+}, [fechaInicio, fechaFin, sucursalId]);
 
   const enviarWhatsAppReimpresion = () => {
     if (!ticketReimpresion) return;
@@ -652,7 +671,7 @@ export default function HistorialPage() {
         <head>
           <meta charset="utf-8">
           <title>Ticket #${venta.id.slice(0, 8)}</title>
-          <style>
+         <style>
   @page {
     size: 58mm auto;
     margin: 0;
@@ -662,7 +681,7 @@ export default function HistorialPage() {
     width: 54mm;
     margin: 0 auto;
     padding: 2mm;
-    font-size: 13px;
+    font-size: 16px;
     font-weight: normal;
   }
   h2, p { margin: 3px 0; }
@@ -676,9 +695,11 @@ export default function HistorialPage() {
 </style>
         </head>
         <body>
-          <h2 style="text-align: center;">Bicicletas Castañeda</h2>
-          ${sucursal ? `<p style="text-align: center; font-size: 12px;">${sucursal}</p>` : ""}
-          <p style="text-align: center; font-size: 12px;">Reimpresión</p>
+         <h2 style="text-align: center;">${configTicket.nombre_taller}</h2>
+${configTicket.direccion ? `<p style="text-align: center; font-size: 11px;">${configTicket.direccion}</p>` : ""}
+${configTicket.telefono ? `<p style="text-align: center; font-size: 11px;">Tel: ${configTicket.telefono}</p>` : ""}
+${sucursal ? `<p style="text-align: center; font-size: 11px;">Sucursal: ${sucursal}</p>` : ""}
+<p style="text-align: center; font-size: 10px;">Reimpresión</p>
           <hr>
           <p>Ticket #${venta.id.slice(0, 8)}</p>
           <p>${new Date(venta.created_at).toLocaleString("es-MX")}</p>
