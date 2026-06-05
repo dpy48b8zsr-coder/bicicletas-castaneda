@@ -629,7 +629,104 @@ export default function HistorialPage() {
     window.open(url, "_blank");
   };
 
-  const imprimirTicket = () => { window.print(); };
+  const imprimirTicket = () => {
+    if (!ticketReimpresion) return;
+
+    const venta = ticketReimpresion.venta;
+    const detalles = ticketReimpresion.detalles;
+    const sucursal = ticketReimpresion.sucursalNombre || "";
+    const clienteNombre = ticketReimpresion.clienteNombre || "";
+
+    const lineasHTML = detalles
+      .map(
+        (item: any) => `
+      <div style="display: flex; justify-content: space-between; font-size: 14px; padding: 2px 0;">
+        <span>${item.productos?.nombre || "Producto"} x${item.cantidad}</span>
+        <span>$${(item.precio_unitario * item.cantidad).toFixed(2)}</span>
+      </div>`
+      )
+      .join("");
+
+    const html = `
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <title>Ticket #${venta.id.slice(0, 8)}</title>
+          <style>
+            body {
+              font-family: 'Courier New', monospace;
+              width: 80mm;
+              margin: 0 auto;
+              padding: 5mm;
+              font-size: 12px;
+            }
+            h2, p { margin: 4px 0; }
+            hr { border: 0; border-top: 1px dashed #000; margin: 6px 0; }
+            @media print {
+              body { margin: 0; }
+            }
+          </style>
+        </head>
+        <body>
+          <h2 style="text-align: center;">Bicicletas Castañeda</h2>
+          ${sucursal ? `<p style="text-align: center; font-size: 12px;">${sucursal}</p>` : ""}
+          <p style="text-align: center; font-size: 12px;">Reimpresión</p>
+          <hr>
+          <p>Ticket #${venta.id.slice(0, 8)}</p>
+          <p>${new Date(venta.created_at).toLocaleString("es-MX")}</p>
+          <hr>
+          ${lineasHTML}
+          ${
+            ticketReimpresion.descuentoPuntos > 0
+              ? `<div style="display: flex; justify-content: space-between; font-size: 14px; padding: 2px 0;">
+                  <span>Descuento puntos</span>
+                  <span>-$${ticketReimpresion.descuentoPuntos.toFixed(2)}</span>
+                </div>`
+              : ""
+          }
+          <hr>
+          <div style="display: flex; justify-content: space-between; font-size: 16px; font-weight: bold;">
+            <span>Total</span>
+            <span>$${venta.total.toFixed(2)}</span>
+          </div>
+          <p>Método: ${venta.metodo_pago}</p>
+          ${
+            venta.monto_recibido != null
+              ? `<p>Recibido: $${venta.monto_recibido.toFixed(2)}</p>
+                 ${
+                   venta.cambio != null
+                     ? `<p>Cambio: $${venta.cambio.toFixed(2)}</p>`
+                     : ""
+                 }`
+              : ""
+          }
+          ${
+            venta.detalle_pago
+              ? venta.detalle_pago
+                  .map((p: any) => `<p>${p.metodo}: $${p.monto.toFixed(2)}</p>`)
+                  .join("")
+              : ""
+          }
+          ${clienteNombre ? `<p>Cliente: ${clienteNombre}</p>` : ""}
+          ${venta.puntos_ganados > 0 ? `<p>Puntos ganados: +${venta.puntos_ganados}</p>` : ""}
+          ${venta.puntos_canjeados > 0 ? `<p>Puntos canjeados: -${venta.puntos_canjeados}</p>` : ""}
+          <hr>
+          <p style="text-align: center;">¡Gracias por tu compra!</p>
+        </body>
+      </html>
+    `;
+
+    const blob = new Blob([html], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    const ventana = window.open(url, "_blank");
+    if (ventana) {
+      ventana.onload = () => {
+        ventana.print();
+      };
+    } else {
+      alert("Permite las ventanas emergentes para imprimir el ticket.");
+    }
+  };
 
   const barOptions = { responsive: true, plugins: { legend: { display: false } } };
   const doughnutOptions = { responsive: true, plugins: { legend: { position: "bottom" as const } } };
