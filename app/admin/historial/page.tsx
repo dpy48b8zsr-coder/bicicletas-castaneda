@@ -193,7 +193,7 @@ function DevolucionModal({
         items: itemsDevueltos,
         motivo: motivo.trim(),
         total_devuelto: totalDevuelto,
-        sucursal_id: venta.sucursal_id, // hereda la sucursal de la venta original
+        sucursal_id: venta.sucursal_id,
       });
       if (insError) throw insError;
 
@@ -494,7 +494,6 @@ export default function HistorialPage() {
     const { start: inicio } = localDateRange(fechaInicio);
     const { end: fin } = localDateRange(fechaFin);
 
-    // Consulta de ventas filtrada por sucursal
     let queryVentas = supabase.from("ventas").select("*")
       .gte("created_at", inicio)
       .lte("created_at", fin)
@@ -502,7 +501,6 @@ export default function HistorialPage() {
     if (sucursalId) queryVentas = queryVentas.eq("sucursal_id", sucursalId);
     const { data: ventasData, error } = await queryVentas;
 
-    // Devoluciones también filtradas
     let queryDev = supabase.from("devoluciones").select("total_devuelto")
       .gte("created_at", inicio)
       .lte("created_at", fin);
@@ -558,7 +556,6 @@ export default function HistorialPage() {
     const margenPorcentaje = total > 0 ? (margen / total) * 100 : 0;
     setMetrica({ total, cantidad, promedio, metodoTop, margen, margenPorcentaje });
 
-    // Ventas por día
     const ventasPorDiaMap: Record<string, number> = {};
     ventasActivas.forEach(v => {
       const fecha = new Date(v.created_at).toISOString().slice(0, 10);
@@ -572,7 +569,6 @@ export default function HistorialPage() {
 
     setMetodosPago({ labels: Object.keys(metodosMap), valores: Object.values(metodosMap) });
 
-    // Categorías (se filtran automáticamente porque los detalles vienen de ventas filtradas)
     const categoriaMap: Record<string, number> = {};
     if (detallesData && !detallesError) {
       detallesData.forEach((detalle: any) => {
@@ -730,43 +726,79 @@ export default function HistorialPage() {
           </div>
         </div>
 
+        {/* Tabla de ventas con diseño responsive: tabla en escritorio, tarjetas en móvil */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
           {cargando ? <p className="p-4 text-gray-800">Cargando ventas...</p> : ventas.length === 0 ? <p className="p-4 text-gray-800">No hay ventas en este período.</p> : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50 border-b border-gray-200">
-                  <tr><th className="px-4 py-3 text-left font-semibold text-gray-900">ID</th><th className="px-4 py-3 text-left font-semibold text-gray-900">Fecha</th><th className="px-4 py-3 text-left font-semibold text-gray-900">Método</th><th className="px-4 py-3 text-left font-semibold text-gray-900">Total</th><th className="px-4 py-3 text-left font-semibold text-gray-900">Cambio</th><th className="px-4 py-3 text-left font-semibold text-gray-900">Estado</th><th className="px-4 py-3 text-left font-semibold text-gray-900">Acciones</th></tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {ventas.map((venta) => (
-                    <tr key={venta.id} className={`hover:bg-gray-50 ${venta.estado === "devuelta" ? "bg-red-50" : ""}`}>
-                      <td className="px-4 py-3 text-gray-800 font-mono text-xs">{venta.id.slice(0, 8)}...</td>
-                      <td className="px-4 py-3 text-gray-900">{new Date(venta.created_at).toLocaleString("es-MX")}</td>
-                      <td className="px-4 py-3 capitalize"><span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${venta.metodo_pago === "efectivo" ? "bg-green-100 text-green-900" : venta.metodo_pago === "tarjeta" ? "bg-blue-100 text-blue-900" : venta.metodo_pago === "transferencia" ? "bg-purple-100 text-purple-900" : venta.metodo_pago === "credito" ? "bg-orange-100 text-orange-900" : "bg-gray-100 text-gray-900"}`}>{venta.metodo_pago}</span></td>
-                      <td className="px-4 py-3 font-semibold text-gray-900">${venta.total.toFixed(2)}</td>
-                      <td className="px-4 py-3 text-gray-800">{venta.cambio != null ? `$${venta.cambio.toFixed(2)}` : "—"}</td>
-                      <td className="px-4 py-3">
-                        {venta.estado === "devuelta" ? (
-                          <span className="inline-block px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-900">Devuelta</span>
-                        ) : (
-                          <span className="inline-block px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-900">Activa</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        {venta.estado !== "devuelta" ? (
-                          <div className="flex gap-2 flex-wrap">
-                            <button onClick={() => reimprimirTicket(venta)} className="text-green-600 hover:text-green-800 text-xs font-medium underline">Reimprimir</button>
-                            <button onClick={() => setVentaDevolucion(venta)} className="text-red-600 hover:text-red-800 text-xs font-medium underline">Devolución</button>
-                          </div>
-                        ) : (
-                          <span className="text-xs text-gray-400">—</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <>
+              {/* Tabla normal en escritorio (md hacia arriba) */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 border-b border-gray-200">
+                    <tr><th className="px-4 py-3 text-left font-semibold text-gray-900">ID</th><th className="px-4 py-3 text-left font-semibold text-gray-900">Fecha</th><th className="px-4 py-3 text-left font-semibold text-gray-900">Método</th><th className="px-4 py-3 text-left font-semibold text-gray-900">Total</th><th className="px-4 py-3 text-left font-semibold text-gray-900">Cambio</th><th className="px-4 py-3 text-left font-semibold text-gray-900">Estado</th><th className="px-4 py-3 text-left font-semibold text-gray-900">Acciones</th></tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {ventas.map((venta) => (
+                      <tr key={venta.id} className={`hover:bg-gray-50 ${venta.estado === "devuelta" ? "bg-red-50" : ""}`}>
+                        <td className="px-4 py-3 text-gray-800 font-mono text-xs">{venta.id.slice(0, 8)}...</td>
+                        <td className="px-4 py-3 text-gray-900">{new Date(venta.created_at).toLocaleString("es-MX")}</td>
+                        <td className="px-4 py-3 capitalize"><span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${venta.metodo_pago === "efectivo" ? "bg-green-100 text-green-900" : venta.metodo_pago === "tarjeta" ? "bg-blue-100 text-blue-900" : venta.metodo_pago === "transferencia" ? "bg-purple-100 text-purple-900" : venta.metodo_pago === "credito" ? "bg-orange-100 text-orange-900" : "bg-gray-100 text-gray-900"}`}>{venta.metodo_pago}</span></td>
+                        <td className="px-4 py-3 font-semibold text-gray-900">${venta.total.toFixed(2)}</td>
+                        <td className="px-4 py-3 text-gray-800">{venta.cambio != null ? `$${venta.cambio.toFixed(2)}` : "—"}</td>
+                        <td className="px-4 py-3">
+                          {venta.estado === "devuelta" ? (
+                            <span className="inline-block px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-900">Devuelta</span>
+                          ) : (
+                            <span className="inline-block px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-900">Activa</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          {venta.estado !== "devuelta" ? (
+                            <div className="flex gap-2 flex-wrap">
+                              <button onClick={() => reimprimirTicket(venta)} className="text-green-600 hover:text-green-800 text-xs font-medium underline">Reimprimir</button>
+                              <button onClick={() => setVentaDevolucion(venta)} className="text-red-600 hover:text-red-800 text-xs font-medium underline">Devolución</button>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-gray-400">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Tarjetas en móvil (menos de md) */}
+              <div className="md:hidden divide-y divide-gray-100">
+                {ventas.map((venta) => (
+                  <div key={venta.id} className={`p-4 ${venta.estado === "devuelta" ? "bg-red-50" : ""}`}>
+                    <div className="flex justify-between items-start mb-2">
+                      <span className="font-mono text-xs text-gray-500">#{venta.id.slice(0, 8)}</span>
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                        venta.estado === "devuelta" ? "bg-red-100 text-red-800" : "bg-green-100 text-green-800"
+                      }`}>
+                        {venta.estado === "devuelta" ? "Devuelta" : "Activa"}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                      <p className="text-gray-500">Fecha:</p>
+                      <p className="text-gray-900 text-right">{new Date(venta.created_at).toLocaleString("es-MX")}</p>
+                      <p className="text-gray-500">Método:</p>
+                      <p className="text-gray-900 text-right capitalize">{venta.metodo_pago}</p>
+                      <p className="text-gray-500">Total:</p>
+                      <p className="text-gray-900 text-right font-semibold">${venta.total.toFixed(2)}</p>
+                      <p className="text-gray-500">Cambio:</p>
+                      <p className="text-gray-900 text-right">{venta.cambio != null ? `$${venta.cambio.toFixed(2)}` : "—"}</p>
+                    </div>
+                    {venta.estado !== "devuelta" && (
+                      <div className="flex gap-3 mt-3">
+                        <button onClick={() => reimprimirTicket(venta)} className="text-green-600 text-xs font-medium underline">Reimprimir</button>
+                        <button onClick={() => setVentaDevolucion(venta)} className="text-red-600 text-xs font-medium underline">Devolución</button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </>
           )}
         </div>
       </div>
