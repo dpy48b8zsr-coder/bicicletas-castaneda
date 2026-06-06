@@ -416,7 +416,6 @@ function OrdenTallerPage() {
       </html>
     `;
 
-        // Crear un enlace temporal para descargar el archivo HTML
     const blob = new Blob([html], { type: "text/html" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -470,8 +469,18 @@ function OrdenTallerPage() {
                     <td className="px-4 py-3 text-right font-semibold text-gray-900">${o.total.toFixed(2)}</td>
                     <td className="px-4 py-3">
                       <div className="flex gap-2 flex-wrap">
-                        <button onClick={() => abrirEditar(o)} className="text-blue-600 hover:text-blue-800 text-xs font-medium underline">Editar</button>
-                        <button onClick={() => descargarPDF(o)} className="text-gray-600 hover:text-gray-800 text-xs font-medium underline">📄 PDF</button>
+                        <button
+                          onClick={() => abrirEditar(o)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 text-xs font-medium transition-colors"
+                        >
+                          ✏️ Editar
+                        </button>
+                        <button
+                          onClick={() => descargarPDF(o)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-gray-50 text-gray-700 hover:bg-gray-100 border border-gray-200 text-xs font-medium transition-colors"
+                        >
+                          📄 PDF
+                        </button>
                         <select
                           value={o.estado}
                           onChange={(e) => cambiarEstado(o.id, e.target.value, o.cita_id)}
@@ -480,7 +489,12 @@ function OrdenTallerPage() {
                           {ESTADOS.map(e => <option key={e} value={e}>{e.replace(/_/g, " ")}</option>)}
                         </select>
                         {o.estado !== "facturada" && (
-                          <button onClick={() => convertirEnVenta(o)} className="text-purple-600 hover:text-purple-800 text-xs font-bold underline">Convertir en venta</button>
+                          <button
+                            onClick={() => convertirEnVenta(o)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 text-xs font-medium transition-colors"
+                          >
+                            🛒 Convertir en venta
+                          </button>
                         )}
                       </div>
                     </td>
@@ -517,8 +531,18 @@ function OrdenTallerPage() {
               <div className="mt-2 flex items-center justify-between">
                 <span className="text-lg font-bold text-green-700">${o.total.toFixed(2)}</span>
                 <div className="flex gap-2 flex-wrap">
-                  <button onClick={() => abrirEditar(o)} className="text-blue-600 text-xs font-medium underline">Editar</button>
-                  <button onClick={() => descargarPDF(o)} className="text-gray-600 text-xs font-medium underline">PDF</button>
+                  <button
+                    onClick={() => abrirEditar(o)}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 text-xs font-medium transition-colors"
+                  >
+                    ✏️ Editar
+                  </button>
+                  <button
+                    onClick={() => descargarPDF(o)}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-gray-50 text-gray-700 hover:bg-gray-100 border border-gray-200 text-xs font-medium transition-colors"
+                  >
+                    📄 PDF
+                  </button>
                   <select
                     value={o.estado}
                     onChange={(e) => cambiarEstado(o.id, e.target.value, o.cita_id)}
@@ -527,7 +551,12 @@ function OrdenTallerPage() {
                     {ESTADOS.map(e => <option key={e} value={e}>{e.replace(/_/g, " ")}</option>)}
                   </select>
                   {o.estado !== "facturada" && (
-                    <button onClick={() => convertirEnVenta(o)} className="text-purple-600 text-xs font-bold underline">Convertir en venta</button>
+                    <button
+                      onClick={() => convertirEnVenta(o)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 text-xs font-medium transition-colors"
+                    >
+                      🛒 Convertir en venta
+                    </button>
                   )}
                 </div>
               </div>
@@ -536,7 +565,7 @@ function OrdenTallerPage() {
         )}
       </div>
 
-      {/* Modal formulario (se mantiene igual) */}
+      {/* Modal formulario */}
       {mostrarForm && (
         <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-3xl border border-gray-200 max-h-[90vh] overflow-y-auto">

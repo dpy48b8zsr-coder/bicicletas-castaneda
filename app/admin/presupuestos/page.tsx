@@ -248,16 +248,34 @@ export default function PresupuestosPage() {
                     <td className="px-4 py-3 text-right font-semibold text-gray-900">${p.total.toFixed(2)}</td>
                     <td className="px-4 py-3">
                       <div className="flex gap-2 flex-wrap">
-                        <button onClick={() => abrirEditar(p)} className="text-blue-600 hover:text-blue-800 text-xs font-medium underline">Editar</button>
+                        <button
+                          onClick={() => abrirEditar(p)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 text-xs font-medium transition-colors"
+                        >
+                          ✏️ Editar
+                        </button>
                         {p.estado === "pendiente" && (
                           <>
-                            <button onClick={() => cambiarEstado(p.id, "aprobado")} className="text-green-600 hover:text-green-800 text-xs font-medium underline">Aprobar</button>
-                            <button onClick={() => cambiarEstado(p.id, "rechazado")} className="text-red-600 hover:text-red-800 text-xs font-medium underline">Rechazar</button>
+                            <button
+                              onClick={() => cambiarEstado(p.id, "aprobado")}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 text-xs font-medium transition-colors"
+                            >
+                              ✅ Aprobar
+                            </button>
+                            <button
+                              onClick={() => cambiarEstado(p.id, "rechazado")}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 text-xs font-medium transition-colors"
+                            >
+                              ❌ Rechazar
+                            </button>
                           </>
                         )}
                         {p.estado === "aprobado" && (
-                          <button onClick={() => convertirEnVenta(p.id)} className="text-purple-600 hover:text-purple-800 text-xs font-bold underline">
-                            Convertir en venta
+                          <button
+                            onClick={() => convertirEnVenta(p.id)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 text-xs font-medium transition-colors"
+                          >
+                            🛒 Convertir en venta
                           </button>
                         )}
                       </div>
@@ -293,15 +311,35 @@ export default function PresupuestosPage() {
               <div className="mt-2 flex items-center justify-between">
                 <span className="text-lg font-bold text-green-700">${p.total.toFixed(2)}</span>
                 <div className="flex gap-2">
-                  <button onClick={() => abrirEditar(p)} className="text-blue-600 text-xs font-medium underline">Editar</button>
+                  <button
+                    onClick={() => abrirEditar(p)}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 text-xs font-medium transition-colors"
+                  >
+                    ✏️ Editar
+                  </button>
                   {p.estado === "pendiente" && (
                     <>
-                      <button onClick={() => cambiarEstado(p.id, "aprobado")} className="text-green-600 text-xs font-medium underline">Aprobar</button>
-                      <button onClick={() => cambiarEstado(p.id, "rechazado")} className="text-red-600 text-xs font-medium underline">Rechazar</button>
+                      <button
+                        onClick={() => cambiarEstado(p.id, "aprobado")}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 text-xs font-medium transition-colors"
+                      >
+                        ✅ Aprobar
+                      </button>
+                      <button
+                        onClick={() => cambiarEstado(p.id, "rechazado")}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 text-xs font-medium transition-colors"
+                      >
+                        ❌ Rechazar
+                      </button>
                     </>
                   )}
                   {p.estado === "aprobado" && (
-                    <button onClick={() => convertirEnVenta(p.id)} className="text-purple-600 text-xs font-bold underline">Convertir en venta</button>
+                    <button
+                      onClick={() => convertirEnVenta(p.id)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 text-xs font-medium transition-colors"
+                    >
+                      🛒 Convertir en venta
+                    </button>
                   )}
                 </div>
               </div>
@@ -310,7 +348,7 @@ export default function PresupuestosPage() {
         )}
       </div>
 
-      {/* Modal de formulario (sin cambios) */}
+      {/* Modal de formulario */}
       {mostrarForm && (
         <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-3xl border border-gray-200 max-h-[90vh] overflow-y-auto">

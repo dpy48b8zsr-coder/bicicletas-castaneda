@@ -878,15 +878,25 @@ ${sucursal ? `<p style="text-align: center; font-size: 11px;">Sucursal: ${sucurs
                           )}
                         </td>
                         <td className="px-4 py-3">
-                          {venta.estado !== "devuelta" ? (
-                            <div className="flex gap-2 flex-wrap">
-                              <button onClick={() => reimprimirTicket(venta)} className="text-green-600 hover:text-green-800 text-xs font-medium underline">Reimprimir</button>
-                              <button onClick={() => setVentaDevolucion(venta)} className="text-red-600 hover:text-red-800 text-xs font-medium underline">Devolución</button>
-                            </div>
-                          ) : (
-                            <span className="text-xs text-gray-400">—</span>
-                          )}
-                        </td>
+  {venta.estado !== "devuelta" ? (
+    <div className="flex gap-2 flex-wrap">
+      <button
+        onClick={() => reimprimirTicket(venta)}
+        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 text-xs font-medium transition-colors"
+      >
+        🖨️ Reimprimir
+      </button>
+      <button
+        onClick={() => setVentaDevolucion(venta)}
+        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 text-xs font-medium transition-colors"
+      >
+        ↩️ Devolución
+      </button>
+    </div>
+  ) : (
+    <span className="text-xs text-gray-400">—</span>
+  )}
+</td>
                       </tr>
                     ))}
                   </tbody>

@@ -125,11 +125,11 @@ export default function PedidosOnlinePage() {
                             {ESTADOS.map(e => <option key={e} value={e}>{e.replace(/_/g, " ")}</option>)}
                           </select>
                           <button
-                            onClick={() => convertirEnVenta(p)}
-                            className="text-purple-600 hover:text-purple-800 text-xs font-bold underline"
-                          >
-                            Convertir en venta
-                          </button>
+  onClick={() => convertirEnVenta(p)}
+  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 text-xs font-medium transition-colors"
+>
+  🛒 Convertir en venta
+</button>
                         </div>
                       </td>
                     </tr>
@@ -184,7 +184,12 @@ export default function PedidosOnlinePage() {
                     >
                       {ESTADOS.map(e => <option key={e} value={e}>{e.replace(/_/g, " ")}</option>)}
                     </select>
-                    <button onClick={() => convertirEnVenta(p)} className="text-purple-600 text-xs font-bold underline">Convertir en venta</button>
+                    <button
+  onClick={() => convertirEnVenta(p)}
+  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 text-xs font-medium transition-colors"
+>
+  🛒 Convertir en venta
+</button>
                   </div>
                 </div>
               </div>

@@ -265,25 +265,25 @@ export default function ClientesPage() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex gap-2">
-                        <button
-                          onClick={() => abrirEstadoCuenta(cliente)}
-                          className="text-green-600 hover:text-green-800 text-xs font-medium underline"
-                        >
-                          Estado de cuenta
-                        </button>
-                        <button
-                          onClick={() => abrirEditar(cliente)}
-                          className="text-blue-600 hover:text-blue-800 text-xs font-medium underline"
-                        >
-                          Editar
-                        </button>
-                        <button
-                          onClick={() => setEliminandoId(cliente.id)}
-                          className="text-red-600 hover:text-red-800 text-xs font-medium underline"
-                        >
-                          Eliminar
-                        </button>
-                      </div>
+  <button
+    onClick={() => abrirEstadoCuenta(cliente)}
+    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 text-xs font-medium transition-colors"
+  >
+    💰 Estado de cuenta
+  </button>
+  <button
+    onClick={() => abrirEditar(cliente)}
+    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 text-xs font-medium transition-colors"
+  >
+    ✏️ Editar
+  </button>
+  <button
+    onClick={() => setEliminandoId(cliente.id)}
+    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 text-xs font-medium transition-colors"
+  >
+    🗑️ Eliminar
+  </button>
+</div>
                     </td>
                   </tr>
                 ))}
@@ -309,10 +309,25 @@ export default function ClientesPage() {
                 <span className="font-bold text-green-700">{cliente.puntos} pts</span>
               </div>
               <div className="flex gap-2 mt-2">
-                <button onClick={() => abrirEstadoCuenta(cliente)} className="text-green-600 text-xs font-medium underline">Estado de cuenta</button>
-                <button onClick={() => abrirEditar(cliente)} className="text-blue-600 text-xs font-medium underline">Editar</button>
-                <button onClick={() => setEliminandoId(cliente.id)} className="text-red-600 text-xs font-medium underline">Eliminar</button>
-              </div>
+  <button
+    onClick={() => abrirEstadoCuenta(cliente)}
+    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 text-xs font-medium transition-colors"
+  >
+    💰 Estado de cuenta
+  </button>
+  <button
+    onClick={() => abrirEditar(cliente)}
+    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 text-xs font-medium transition-colors"
+  >
+    ✏️ Editar
+  </button>
+  <button
+    onClick={() => setEliminandoId(cliente.id)}
+    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 text-xs font-medium transition-colors"
+  >
+    🗑️ Eliminar
+  </button>
+</div>
             </div>
           ))
         )}

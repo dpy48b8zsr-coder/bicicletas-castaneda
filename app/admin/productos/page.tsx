@@ -452,19 +452,19 @@ export default function ProductosPage() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex gap-2">
-                        <button
-                          onClick={() => abrirEditar(producto)}
-                          className="text-blue-600 hover:text-blue-800 text-xs font-medium underline"
-                        >
-                          Editar
-                        </button>
-                        <button
-                          onClick={() => setEliminandoId(producto.id)}
-                          className="text-red-600 hover:text-red-800 text-xs font-medium underline"
-                        >
-                          Eliminar
-                        </button>
-                      </div>
+  <button
+    onClick={() => abrirEditar(producto)}
+    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 text-xs font-medium transition-colors"
+  >
+    ✏️ Editar
+  </button>
+  <button
+    onClick={() => setEliminandoId(producto.id)}
+    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 text-xs font-medium transition-colors"
+  >
+    🗑️ Eliminar
+  </button>
+</div>
                     </td>
                   </tr>
                 ))}
@@ -502,9 +502,19 @@ export default function ProductosPage() {
                     <span>Categoría: {categorias.find(c => c.id === producto.categoria_id)?.nombre || "—"}</span>
                   </div>
                   <div className="flex gap-2 mt-2">
-                    <button onClick={() => abrirEditar(producto)} className="text-blue-600 text-xs font-medium underline">Editar</button>
-                    <button onClick={() => setEliminandoId(producto.id)} className="text-red-600 text-xs font-medium underline">Eliminar</button>
-                  </div>
+  <button
+    onClick={() => abrirEditar(producto)}
+    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 text-xs font-medium transition-colors"
+  >
+    ✏️ Editar
+  </button>
+  <button
+    onClick={() => setEliminandoId(producto.id)}
+    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 text-xs font-medium transition-colors"
+  >
+    🗑️ Eliminar
+  </button>
+</div>
                 </div>
               </div>
             </div>

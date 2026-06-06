@@ -183,15 +183,15 @@ export default function SolicitudesPage() {
                       <div className="flex gap-2 flex-wrap">
                         <button
                           onClick={() => notificarCliente(s)}
-                          className="text-green-600 hover:text-green-800 text-xs font-medium underline"
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 text-xs font-medium transition-colors"
                         >
-                          Notificar
+                          📲 Notificar
                         </button>
                         <button
                           onClick={() => abrirEditar(s)}
-                          className="text-blue-600 hover:text-blue-800 text-xs font-medium underline"
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 text-xs font-medium transition-colors"
                         >
-                          Editar
+                          ✏️ Editar
                         </button>
                         <select
                           value={s.estado}
@@ -204,9 +204,9 @@ export default function SolicitudesPage() {
                         </select>
                         <button
                           onClick={() => eliminarSolicitud(s.id)}
-                          className="text-red-600 hover:text-red-800 text-xs font-medium underline"
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 text-xs font-medium transition-colors"
                         >
-                          Eliminar
+                          🗑️ Eliminar
                         </button>
                       </div>
                     </td>
@@ -241,8 +241,18 @@ export default function SolicitudesPage() {
               </div>
               <p className="mt-2 text-sm text-gray-900 font-medium">{s.producto_solicitado}</p>
               <div className="flex gap-2 mt-3 flex-wrap">
-                <button onClick={() => notificarCliente(s)} className="text-green-600 text-xs font-medium underline">Notificar</button>
-                <button onClick={() => abrirEditar(s)} className="text-blue-600 text-xs font-medium underline">Editar</button>
+                <button
+                  onClick={() => notificarCliente(s)}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 text-xs font-medium transition-colors"
+                >
+                  📲 Notificar
+                </button>
+                <button
+                  onClick={() => abrirEditar(s)}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 text-xs font-medium transition-colors"
+                >
+                  ✏️ Editar
+                </button>
                 <select
                   value={s.estado}
                   onChange={(e) => cambiarEstado(s.id, e.target.value)}
@@ -252,7 +262,12 @@ export default function SolicitudesPage() {
                   <option value="notificado">Notificado</option>
                   <option value="cancelado">Cancelado</option>
                 </select>
-                <button onClick={() => eliminarSolicitud(s.id)} className="text-red-600 text-xs font-medium underline">Eliminar</button>
+                <button
+                  onClick={() => eliminarSolicitud(s.id)}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 text-xs font-medium transition-colors"
+                >
+                  🗑️ Eliminar
+                </button>
               </div>
             </div>
           ))
