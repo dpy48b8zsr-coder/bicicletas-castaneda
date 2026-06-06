@@ -105,7 +105,7 @@ function CajaModal({ onClose, sucursalId }: { onClose: () => void; sucursalId?: 
     transferencia: 0,
     credito: 0,
     total: 0,
-    montoInicial: 0,
+    montoInicial: 0, // Se cargará desde el último corte o desde la tabla caja_diaria
   });
   const [movimientos, setMovimientos] = useState<MovimientoCaja[]>([]);
   const [cortes, setCortes] = useState<CorteCaja[]>([]);
@@ -116,6 +116,7 @@ function CajaModal({ onClose, sucursalId }: { onClose: () => void; sucursalId?: 
   const [montoInicialInput, setMontoInicialInput] = useState("");
   const [efectivoRealCorte, setEfectivoRealCorte] = useState("");
   const [comentarioCorte, setComentarioCorte] = useState("");
+  const [montoDejar, setMontoDejar] = useState(""); // <<--- NUEVO: dinero que se deja en caja tras el corte
   const [mensaje, setMensaje] = useState<string | null>(null);
   const [cargando, setCargando] = useState(true);
 
@@ -125,48 +126,81 @@ function CajaModal({ onClose, sucursalId }: { onClose: () => void; sucursalId?: 
   const cargarDatosCaja = async () => {
     setCargando(true);
     try {
+      // Buscar el último corte de esta sucursal
       const { data: ultimoCorte } = await supabase
         .from("cortes_caja")
-        .select("fecha_fin")
+        .select("fecha_fin, efectivo_real")
         .eq("sucursal_id", sucursalId)
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
 
       let inicioEfectivo = inicioDia;
+      let montoInicial = 0;
+
       if (ultimoCorte?.fecha_fin) {
         const fechaCorte = new Date(ultimoCorte.fecha_fin);
-        if (fechaCorte > new Date(inicioDia)) {
+        // Solo tomamos el corte si es de hoy o después; si es de ayer, ignoramos.
+        if (fechaCorte >= new Date(inicioDia)) {
           inicioEfectivo = fechaCorte.toISOString();
+          // El monto inicial para este periodo es el efectivo real que se dejó en caja
+          montoInicial = ultimoCorte.efectivo_real || 0;
+        } else {
+          // Es un corte viejo, tomamos el monto inicial del día si existe
+          const { data: cajaInicial } = await supabase
+            .from("caja_diaria")
+            .select("monto_inicial")
+            .eq("fecha", hoyStr)
+            .maybeSingle();
+          montoInicial = cajaInicial?.monto_inicial || 0;
         }
+      } else {
+        // Nunca se ha hecho un corte hoy: tomamos el monto inicial de caja_diaria
+        const { data: cajaInicial } = await supabase
+          .from("caja_diaria")
+          .select("monto_inicial")
+          .eq("fecha", hoyStr)
+          .maybeSingle();
+        montoInicial = cajaInicial?.monto_inicial || 0;
       }
 
-      const [
-        { data: ventasHoy },
-        { data: abonos },
-        { data: movs },
-        { data: cajaInicial },
-        { data: cortesData },
-      ] = await Promise.all([
-        supabase.from("ventas").select("total, metodo_pago, detalle_pago, created_at")
-          .eq("sucursal_id", sucursalId)
-          .gte("created_at", inicioDia).lte("created_at", finDia),
-        supabase.from("abonos_credito").select("monto, metodo_pago")
-          .eq("sucursal_id", sucursalId)
-          .gte("created_at", inicioEfectivo).lte("created_at", finDia),
-        supabase.from("movimientos_caja").select("*")
-          .eq("sucursal_id", sucursalId)
-          .gte("created_at", inicioEfectivo).lte("created_at", finDia).order("created_at", { ascending: false }),
-        supabase.from("caja_diaria").select("monto_inicial").eq("fecha", hoyStr).maybeSingle(),
-        supabase.from("cortes_caja").select("*")
-          .eq("sucursal_id", sucursalId)
-          .order("created_at", { ascending: false }).limit(10),
-      ]);
+      // Ventas desde el inicio del periodo (último corte o inicio del día)
+      const { data: ventas } = await supabase
+        .from("ventas")
+        .select("total, metodo_pago, detalle_pago, created_at")
+        .eq("sucursal_id", sucursalId)
+        .gte("created_at", inicioEfectivo)
+        .lte("created_at", finDia);
+
+      // Abonos desde el inicio del periodo
+      const { data: abonos } = await supabase
+        .from("abonos_credito")
+        .select("monto, metodo_pago")
+        .eq("sucursal_id", sucursalId)
+        .gte("created_at", inicioEfectivo)
+        .lte("created_at", finDia);
+
+      // Movimientos de caja
+      const { data: movs } = await supabase
+        .from("movimientos_caja")
+        .select("*")
+        .eq("sucursal_id", sucursalId)
+        .gte("created_at", inicioEfectivo)
+        .lte("created_at", finDia)
+        .order("created_at", { ascending: false });
+
+      // Últimos cortes para mostrar historial
+      const { data: cortesData } = await supabase
+        .from("cortes_caja")
+        .select("*")
+        .eq("sucursal_id", sucursalId)
+        .order("created_at", { ascending: false })
+        .limit(10);
 
       let efectivo = 0, tarjeta = 0, transferencia = 0, credito = 0, total = 0;
-      if (ventasHoy) {
-        const ventasFiltradas = ventasHoy.filter(v => new Date(v.created_at) >= new Date(inicioEfectivo));
-        ventasFiltradas.forEach((v) => {
+
+      if (ventas) {
+        ventas.forEach((v) => {
           total += v.total;
           if (v.metodo_pago === "efectivo") efectivo += v.total;
           else if (v.metodo_pago === "tarjeta") tarjeta += v.total;
@@ -181,20 +215,20 @@ function CajaModal({ onClose, sucursalId }: { onClose: () => void; sucursalId?: 
             });
           }
         });
-        if (abonos) {
-          abonos.forEach((a) => {
-            if (a.metodo_pago === "efectivo") efectivo += a.monto;
-            else if (a.metodo_pago === "tarjeta") tarjeta += a.monto;
-            else if (a.metodo_pago === "transferencia") transferencia += a.monto;
-          });
-        }
       }
 
-      const inicial = cajaInicial?.monto_inicial || 0;
-      setCajaData({ efectivo, tarjeta, transferencia, credito, total, montoInicial: inicial });
+      if (abonos) {
+        abonos.forEach((a) => {
+          if (a.metodo_pago === "efectivo") efectivo += a.monto;
+          else if (a.metodo_pago === "tarjeta") tarjeta += a.monto;
+          else if (a.metodo_pago === "transferencia") transferencia += a.monto;
+        });
+      }
+
+      setCajaData({ efectivo, tarjeta, transferencia, credito, total, montoInicial });
       setMovimientos(movs || []);
       setCortes(cortesData || []);
-      setMontoInicialInput(inicial.toString());
+      setMontoInicialInput(montoInicial.toString());
     } catch (err: any) {
       setMensaje("Error al cargar la caja: " + err.message);
     } finally {
@@ -233,10 +267,11 @@ function CajaModal({ onClose, sucursalId }: { onClose: () => void; sucursalId?: 
 
   const realizarCorte = async () => {
     const efectivoReal = parseFloat(efectivoRealCorte) || undefined;
+    const dejar = parseFloat(montoDejar) || 0;
     const ahora = new Date().toISOString();
-    const inicioPeriodo = inicioDia;
+
     await supabase.from("cortes_caja").insert({
-      fecha_inicio: inicioPeriodo,
+      fecha_inicio: inicioDia,
       fecha_fin: ahora,
       total_ventas: cajaData.total,
       efectivo: cajaData.efectivo,
@@ -248,9 +283,14 @@ function CajaModal({ onClose, sucursalId }: { onClose: () => void; sucursalId?: 
       comentario: comentarioCorte.trim() || null,
       sucursal_id: sucursalId,
     });
+
+    // Guardar el dinero que se deja en caja como nuevo monto inicial
+    await supabase.from("caja_diaria").upsert({ fecha: hoyStr, monto_inicial: dejar }, { onConflict: "fecha" });
+
     setEfectivoRealCorte("");
     setComentarioCorte("");
-    setMensaje("Corte registrado. Caja reiniciada.");
+    setMontoDejar("");
+    setMensaje("Corte registrado. La caja se ha reiniciado para el siguiente turno.");
     setTimeout(() => setMensaje(null), 2000);
     cargarDatosCaja();
   };
@@ -270,7 +310,7 @@ function CajaModal({ onClose, sucursalId }: { onClose: () => void; sucursalId?: 
         ) : (
           <>
             <div className="bg-blue-50 rounded-lg p-4 mb-4 border border-blue-200">
-              <label className="block text-sm font-semibold text-gray-900 mb-1">Monto inicial</label>
+              <label className="block text-sm font-semibold text-gray-900 mb-1">Monto inicial (para este turno)</label>
               <div className="flex gap-2">
                 <input type="text" inputMode="decimal" value={montoInicialInput} onChange={(e) => { const val = e.target.value; if (val === "" || /^\d*\.?\d*$/.test(val)) setMontoInicialInput(val); }} className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="0.00" />
                 <button onClick={guardarMontoInicial} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium">Guardar</button>
@@ -327,6 +367,7 @@ function CajaModal({ onClose, sucursalId }: { onClose: () => void; sucursalId?: 
                 <div className="grid grid-cols-2 gap-3">
                   <div><label className="block text-xs font-medium text-gray-900 mb-1">Efectivo contado ($)</label><input type="text" inputMode="decimal" value={efectivoRealCorte} onChange={(e) => { const val = e.target.value; if (val === "" || /^\d*\.?\d*$/.test(val)) setEfectivoRealCorte(val); }} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" /><p className="text-xs text-gray-700 mt-1">Esperado: ${cajaData.efectivo.toFixed(2)}</p></div>
                   <div><label className="block text-xs font-medium text-gray-900 mb-1">Comentario</label><input type="text" value={comentarioCorte} onChange={(e) => setComentarioCorte(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" /></div>
+                  <div className="col-span-2"><label className="block text-xs font-medium text-gray-900 mb-1">Dinero que se deja en caja para el siguiente turno ($)</label><input type="text" inputMode="decimal" value={montoDejar} onChange={(e) => { const val = e.target.value; if (val === "" || /^\d*\.?\d*$/.test(val)) setMontoDejar(val); }} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" /></div>
                 </div>
                 <button onClick={realizarCorte} className="mt-3 w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-lg text-sm">Realizar Corte</button>
               </div>
