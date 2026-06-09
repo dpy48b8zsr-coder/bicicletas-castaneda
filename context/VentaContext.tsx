@@ -21,7 +21,18 @@ interface ItemCarrito {
   cantidad: number;
 }
 
+interface TicketData {
+  id: string;
+  carrito: ItemCarrito[];
+  clienteSeleccionado: string;
+  clientePuntos: number;
+  puntosACanjear: number;
+  descuentoPuntos: number;
+}
+
 interface VentaContextType {
+  tickets: TicketData[];
+  ticketActivoId: string;
   carrito: ItemCarrito[];
   agregarAlCarrito: (producto: Producto) => void;
   eliminarDelCarrito: (id: string) => void;
@@ -36,68 +47,143 @@ interface VentaContextType {
   setPuntosACanjear: (puntos: number) => void;
   descuentoPuntos: number;
   setDescuentoPuntos: (descuento: number) => void;
+  crearNuevoTicket: () => void;
+  cambiarTicket: (id: string) => void;
+  cerrarTicket: (id: string) => void;
 }
 
 const VentaContext = createContext<VentaContextType | undefined>(undefined);
 
+function generarId() {
+  return Date.now().toString(36) + Math.random().toString(36).substring(2, 7);
+}
+
 export function VentaProvider({ children }: { children: ReactNode }) {
-  const [carrito, setCarrito] = useState<ItemCarrito[]>([]);
-  const [clienteSeleccionado, setClienteSeleccionado] = useState<string>("");
-  const [clientePuntos, setClientePuntos] = useState<number>(0);
-  const [puntosACanjear, setPuntosACanjear] = useState<number>(0);
-  const [descuentoPuntos, setDescuentoPuntos] = useState<number>(0);
+  const [tickets, setTickets] = useState<TicketData[]>([
+    { id: generarId(), carrito: [], clienteSeleccionado: "", clientePuntos: 0, puntosACanjear: 0, descuentoPuntos: 0 }
+  ]);
+  const [ticketActivoId, setTicketActivoId] = useState(tickets[0].id);
+
+  const ticketActivo = tickets.find(t => t.id === ticketActivoId) || tickets[0];
+
+  const actualizarTicketActivo = useCallback((actualizador: (ticket: TicketData) => TicketData) => {
+    setTickets(prev => prev.map(t => t.id === ticketActivoId ? actualizador(t) : t));
+  }, [ticketActivoId]);
 
   const agregarAlCarrito = useCallback((producto: Producto) => {
     if (producto.stock === 0) return;
-    setCarrito(prev => {
-      const existe = prev.find(item => item.producto.id === producto.id);
+    actualizarTicketActivo(ticket => {
+      const existe = ticket.carrito.find(item => item.producto.id === producto.id);
       if (existe) {
         if (existe.cantidad < producto.stock)
-          return prev.map(item =>
-            item.producto.id === producto.id ? { ...item, cantidad: item.cantidad + 1 } : item
-          );
-        return prev;
+          return {
+            ...ticket,
+            carrito: ticket.carrito.map(item =>
+              item.producto.id === producto.id ? { ...item, cantidad: item.cantidad + 1 } : item
+            )
+          };
+        return ticket;
       }
-      return [...prev, { producto, cantidad: 1 }];
+      return { ...ticket, carrito: [...ticket.carrito, { producto, cantidad: 1 }] };
     });
-  }, []);
+  }, [actualizarTicketActivo]);
 
   const eliminarDelCarrito = useCallback((id: string) => {
-    setCarrito(prev =>
-      prev.map(item =>
-        item.producto.id === id ? { ...item, cantidad: item.cantidad - 1 } : item
-      ).filter(item => item.cantidad > 0)
-    );
-  }, []);
+    actualizarTicketActivo(ticket => ({
+      ...ticket,
+      carrito: ticket.carrito
+        .map(item => item.producto.id === id ? { ...item, cantidad: item.cantidad - 1 } : item)
+        .filter(item => item.cantidad > 0)
+    }));
+  }, [actualizarTicketActivo]);
 
   const vaciarCarrito = useCallback(() => {
-    setCarrito([]);
-    setClienteSeleccionado("");
-    setClientePuntos(0);
-    setPuntosACanjear(0);
-    setDescuentoPuntos(0);
+    actualizarTicketActivo(ticket => ({
+      ...ticket,
+      carrito: [],
+      clienteSeleccionado: "",
+      clientePuntos: 0,
+      puntosACanjear: 0,
+      descuentoPuntos: 0,
+    }));
+  }, [actualizarTicketActivo]);
+
+  const setClienteSeleccionado = useCallback((id: string) => {
+    actualizarTicketActivo(ticket => ({ ...ticket, clienteSeleccionado: id }));
+  }, [actualizarTicketActivo]);
+
+  const setClientePuntos = useCallback((puntos: number) => {
+    actualizarTicketActivo(ticket => ({ ...ticket, clientePuntos: puntos }));
+  }, [actualizarTicketActivo]);
+
+  const setPuntosACanjear = useCallback((puntos: number) => {
+    actualizarTicketActivo(ticket => ({ ...ticket, puntosACanjear: puntos }));
+  }, [actualizarTicketActivo]);
+
+  const setDescuentoPuntos = useCallback((descuento: number) => {
+    actualizarTicketActivo(ticket => ({ ...ticket, descuentoPuntos: descuento }));
+  }, [actualizarTicketActivo]);
+
+  const crearNuevoTicket = useCallback(() => {
+    const nuevoTicket: TicketData = {
+      id: generarId(),
+      carrito: [],
+      clienteSeleccionado: "",
+      clientePuntos: 0,
+      puntosACanjear: 0,
+      descuentoPuntos: 0,
+    };
+    setTickets(prev => [...prev, nuevoTicket]);
+    setTicketActivoId(nuevoTicket.id);
   }, []);
 
-  const subtotal = carrito.reduce((acc, item) => acc + item.producto.precio * item.cantidad, 0);
-  const total = subtotal - descuentoPuntos;
+  const cambiarTicket = useCallback((id: string) => {
+    setTicketActivoId(id);
+  }, []);
+
+  const cerrarTicket = useCallback((id: string) => {
+    setTickets(prev => {
+      const nuevos = prev.filter(t => t.id !== id);
+      if (nuevos.length === 0) {
+        const unico = { id: generarId(), carrito: [], clienteSeleccionado: "", clientePuntos: 0, puntosACanjear: 0, descuentoPuntos: 0 };
+        return [unico];
+      }
+      return nuevos;
+    });
+    setTicketActivoId(prev => {
+      if (prev === id) {
+        const nuevos = tickets.filter(t => t.id !== id);
+        return nuevos.length > 0 ? nuevos[0].id : "";
+      }
+      return prev;
+    });
+  }, [tickets]);
+
+  const subtotal = ticketActivo.carrito.reduce((acc, item) => acc + item.producto.precio * item.cantidad, 0);
+  const total = subtotal - ticketActivo.descuentoPuntos;
 
   return (
     <VentaContext.Provider
       value={{
-        carrito,
+        tickets,
+        ticketActivoId,
+        carrito: ticketActivo.carrito,
         agregarAlCarrito,
         eliminarDelCarrito,
         vaciarCarrito,
         subtotal,
         total,
-        clienteSeleccionado,
+        clienteSeleccionado: ticketActivo.clienteSeleccionado,
         setClienteSeleccionado,
-        clientePuntos,
+        clientePuntos: ticketActivo.clientePuntos,
         setClientePuntos,
-        puntosACanjear,
+        puntosACanjear: ticketActivo.puntosACanjear,
         setPuntosACanjear,
-        descuentoPuntos,
+        descuentoPuntos: ticketActivo.descuentoPuntos,
         setDescuentoPuntos,
+        crearNuevoTicket,
+        cambiarTicket,
+        cerrarTicket,
       }}
     >
       {children}

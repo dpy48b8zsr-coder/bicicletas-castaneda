@@ -37,6 +37,10 @@ export default function ProductosPage() {
   const [sortField, setSortField] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
+  // Paginación
+  const [paginaActual, setPaginaActual] = useState(1);
+  const productosPorPagina = 12;
+
   // Modal de producto
   const [mostrarFormulario, setMostrarFormulario] = useState(false);
   const [editandoId, setEditandoId] = useState<string | null>(null);
@@ -74,16 +78,16 @@ export default function ProductosPage() {
   // Mensajes
   const [mensaje, setMensaje] = useState<{ tipo: "exito" | "error"; texto: string } | null>(null);
 
- const cargarDatos = async () => {
-  setCargando(true);
-  const [resProductos, resCategorias] = await Promise.all([
-    supabase.from("productos").select("*").eq("sucursal_id", sucursalId).eq("activo", true).order("nombre"),
-    supabase.from("categorias").select("*").order("nombre"),
-  ]);
-  if (resProductos.data) setProductos(resProductos.data);
-  if (resCategorias.data) setCategorias(resCategorias.data);
-  setCargando(false);
-};
+  const cargarDatos = async () => {
+    setCargando(true);
+    const [resProductos, resCategorias] = await Promise.all([
+      supabase.from("productos").select("*").eq("sucursal_id", sucursalId).eq("activo", true).order("nombre"),
+      supabase.from("categorias").select("*").order("nombre"),
+    ]);
+    if (resProductos.data) setProductos(resProductos.data);
+    if (resCategorias.data) setCategorias(resCategorias.data);
+    setCargando(false);
+  };
 
   useEffect(() => {
     cargarDatos();
@@ -118,6 +122,16 @@ export default function ProductosPage() {
     }
     return lista;
   }, [productos, busqueda, filtroCategoria, sortField, sortDir]);
+
+  // Calcular total de páginas y productos de la página actual
+  const totalPaginas = Math.ceil(productosFiltrados.length / productosPorPagina);
+  const inicio = (paginaActual - 1) * productosPorPagina;
+  const productosPaginados = productosFiltrados.slice(inicio, inicio + productosPorPagina);
+
+  // Reiniciar a página 1 cuando cambian los filtros
+  useEffect(() => {
+    setPaginaActual(1);
+  }, [busqueda, filtroCategoria]);
 
   const toggleSort = (field: string) => {
     if (sortField === field) {
@@ -249,21 +263,21 @@ export default function ProductosPage() {
     let campoDuplicado = "";
 
     if (nombreTrim) {
-      let query = supabase.from("productos").select("id").eq("nombre", nombreTrim).eq("sucursal_id", sucursalId);
+      let query = supabase.from("productos").select("id").eq("nombre", nombreTrim).eq("sucursal_id", sucursalId).eq("activo", true);
       if (editandoId) query = query.neq("id", editandoId);
       const { data: nombreData } = await query.limit(1);
       if (nombreData && nombreData.length > 0) { duplicado = true; campoDuplicado = "nombre"; }
     }
 
     if (!duplicado && skuTrim) {
-      let query = supabase.from("productos").select("id").eq("sku", skuTrim).eq("sucursal_id", sucursalId);
+      let query = supabase.from("productos").select("id").eq("sku", skuTrim).eq("sucursal_id", sucursalId).eq("activo", true);
       if (editandoId) query = query.neq("id", editandoId);
       const { data: skuData } = await query.limit(1);
       if (skuData && skuData.length > 0) { duplicado = true; campoDuplicado = "SKU"; }
     }
 
     if (!duplicado && codBarrasTrim) {
-      let query = supabase.from("productos").select("id").eq("codigo_barras", codBarrasTrim).eq("sucursal_id", sucursalId);
+      let query = supabase.from("productos").select("id").eq("codigo_barras", codBarrasTrim).eq("sucursal_id", sucursalId).eq("activo", true);
       if (editandoId) query = query.neq("id", editandoId);
       const { data: codData } = await query.limit(1);
       if (codData && codData.length > 0) { duplicado = true; campoDuplicado = "código de barras"; }
@@ -302,7 +316,7 @@ export default function ProductosPage() {
     if (editandoId) {
       await supabase.from("productos").update(datos).eq("id", editandoId);
     } else {
-      await supabase.from("productos").insert({ ...datos, tipo: "producto_simple" });
+      await supabase.from("productos").insert({ ...datos, tipo: "producto_simple", activo: true });
     }
     setGuardando(false);
     cerrarFormulario();
@@ -310,10 +324,10 @@ export default function ProductosPage() {
   };
 
   const eliminarProducto = async (id: string) => {
-  await supabase.from("productos").update({ activo: false }).eq("id", id);
-  setEliminandoId(null);
-  cargarDatos();
-};
+    await supabase.from("productos").update({ activo: false }).eq("id", id);
+    setEliminandoId(null);
+    cargarDatos();
+  };
 
   // Gestión de categorías
   const abrirGestionCategorias = () => {
@@ -394,7 +408,7 @@ export default function ProductosPage() {
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hidden md:block">
         {cargando ? (
           <p className="p-4 text-gray-800">Cargando productos...</p>
-        ) : productosFiltrados.length === 0 ? (
+        ) : productosPaginados.length === 0 ? (
           <p className="p-4 text-gray-800">No se encontraron productos.</p>
         ) : (
           <div className="overflow-x-auto">
@@ -428,7 +442,7 @@ export default function ProductosPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {productosFiltrados.map((producto) => (
+                {productosPaginados.map((producto) => (
                   <tr key={producto.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3">
                       {producto.imagen_url ? (
@@ -452,19 +466,19 @@ export default function ProductosPage() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex gap-2">
-  <button
-    onClick={() => abrirEditar(producto)}
-    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 text-xs font-medium transition-colors"
-  >
-    ✏️ Editar
-  </button>
- <button
-  onClick={() => setEliminandoId(producto.id)}
-  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 text-xs font-medium transition-colors"
->
-  🗑️ Desactivar
-</button>
-</div>
+                        <button
+                          onClick={() => abrirEditar(producto)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 text-xs font-medium transition-colors"
+                        >
+                          ✏️ Editar
+                        </button>
+                        <button
+                          onClick={() => setEliminandoId(producto.id)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 text-xs font-medium transition-colors"
+                        >
+                          🗑️ Desactivar
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -478,10 +492,10 @@ export default function ProductosPage() {
       <div className="md:hidden space-y-3">
         {cargando ? (
           <p className="text-center text-gray-800 py-12">Cargando productos...</p>
-        ) : productosFiltrados.length === 0 ? (
+        ) : productosPaginados.length === 0 ? (
           <p className="text-center text-gray-800 py-12">No se encontraron productos.</p>
         ) : (
-          productosFiltrados.map((producto) => (
+          productosPaginados.map((producto) => (
             <div key={producto.id} className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
               <div className="flex gap-3">
                 <div className="flex-shrink-0">
@@ -502,19 +516,19 @@ export default function ProductosPage() {
                     <span>Categoría: {categorias.find(c => c.id === producto.categoria_id)?.nombre || "—"}</span>
                   </div>
                   <div className="flex gap-2 mt-2">
-  <button
-    onClick={() => abrirEditar(producto)}
-    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 text-xs font-medium transition-colors"
-  >
-    ✏️ Editar
-  </button>
-  <button
-  onClick={() => setEliminandoId(producto.id)}
-  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 text-xs font-medium transition-colors"
->
-  🗑️ Desactivar
-</button>
-</div>
+                    <button
+                      onClick={() => abrirEditar(producto)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 text-xs font-medium transition-colors"
+                    >
+                      ✏️ Editar
+                    </button>
+                    <button
+                      onClick={() => setEliminandoId(producto.id)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 text-xs font-medium transition-colors"
+                    >
+                      🗑️ Desactivar
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -522,11 +536,45 @@ export default function ProductosPage() {
         )}
       </div>
 
-      {/* Modal de formulario (sin cambios) */}
+      {/* Paginación */}
+      {totalPaginas > 1 && (
+        <div className="flex items-center justify-center gap-2 mt-4">
+          <button
+            onClick={() => setPaginaActual(p => Math.max(1, p - 1))}
+            disabled={paginaActual === 1}
+            className="px-3 py-1.5 rounded-lg bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium transition-colors"
+          >
+            ← Anterior
+          </button>
+          <div className="flex gap-1">
+            {Array.from({ length: totalPaginas }, (_, i) => i + 1).map((num) => (
+              <button
+                key={num}
+                onClick={() => setPaginaActual(num)}
+                className={`w-9 h-9 rounded-lg text-sm font-medium transition-colors ${
+                  paginaActual === num
+                    ? "bg-green-600 text-white shadow-sm"
+                    : "bg-white border border-gray-300 text-gray-700 hover:bg-gray-50"
+                }`}
+              >
+                {num}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={() => setPaginaActual(p => Math.min(totalPaginas, p + 1))}
+            disabled={paginaActual === totalPaginas}
+            className="px-3 py-1.5 rounded-lg bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium transition-colors"
+          >
+            Siguiente →
+          </button>
+        </div>
+      )}
+
+      {/* Modal de formulario */}
       {mostrarFormulario && (
         <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-lg border border-gray-200 max-h-[90vh] overflow-y-auto">
-            {/* ... formulario sin cambios ... */}
             <h2 className="text-xl font-bold text-gray-900 mb-4">
               {editandoId ? "Editar Producto" : "Nuevo Producto"}
             </h2>
@@ -828,29 +876,29 @@ export default function ProductosPage() {
         </div>
       )}
 
-      {/* Confirmación eliminar producto */}
-    {eliminandoId && (
-  <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-    <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm border border-gray-200">
-      <h3 className="text-lg font-bold text-gray-900 mb-2">¿Desactivar producto?</h3>
-      <p className="text-gray-700 mb-4">El producto se ocultará del inventario pero se conservará el historial de ventas.</p>
-      <div className="flex justify-end gap-3">
-        <button
-          onClick={() => setEliminandoId(null)}
-          className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg font-medium transition"
-        >
-          Cancelar
-        </button>
-        <button
-          onClick={() => eliminarProducto(eliminandoId)}
-          className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition"
-        >
-          Desactivar
-        </button>
-      </div>
-    </div>
-  </div>
-)}
+      {/* Confirmación desactivar producto */}
+      {eliminandoId && (
+        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm border border-gray-200">
+            <h3 className="text-lg font-bold text-gray-900 mb-2">¿Desactivar producto?</h3>
+            <p className="text-gray-700 mb-4">El producto se ocultará del inventario pero se conservará el historial de ventas.</p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setEliminandoId(null)}
+                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg font-medium transition"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => eliminarProducto(eliminandoId)}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition"
+              >
+                Desactivar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
