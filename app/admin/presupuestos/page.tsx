@@ -62,11 +62,13 @@ export default function PresupuestosPage() {
     const [{ data: pres }, { data: cli }, { data: prods }] = await Promise.all([
       supabase.from("presupuestos")
         .select("*, clientes(nombre)")
+        .eq("activo", true)
         .eq("sucursal_id", sucursalId)
         .order("created_at", { ascending: false }),
       supabase.from("clientes").select("id, nombre").order("nombre"),
       supabase.from("productos")
         .select("id, nombre, precio, stock")
+        .eq("activo", true)
         .eq("sucursal_id", sucursalId)
         .order("nombre"),
     ]);
@@ -90,6 +92,7 @@ export default function PresupuestosPage() {
       const { data } = await supabase
         .from("productos")
         .select("id, nombre, precio, stock")
+        .eq("activo", true)
         .eq("sucursal_id", sucursalId)
         .or(`nombre.ilike.${term},sku.ilike.${term},codigo_barras.ilike.${term}`)
         .limit(5);

@@ -666,8 +666,8 @@ useEffect(() => {
         return;
       }
       setCargando(true);
-      let query = supabase.from("productos").select("*");
-      if (sucursalId) query = query.eq("sucursal_id", sucursalId);
+      let query = supabase.from("productos").select("*").eq("activo", true);
+if (sucursalId) query = query.eq("sucursal_id", sucursalId);
       
       if (filtroStockBajo) {
         query = query.lte("stock", 5);

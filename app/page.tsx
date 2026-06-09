@@ -135,7 +135,7 @@ function TiendaContent() {
     const cargarDatos = async () => {
       setCargando(true);
       const [{ data: prods }, { data: cats }] = await Promise.all([
-        supabase.from("productos").select("*").eq("sucursal_id", sucursalId).order("nombre"),
+        supabase.from("productos").select("*").eq("sucursal_id", sucursalId).eq("activo", true).order("nombre"),
         supabase.from("categorias").select("*").order("nombre"),
       ]);
       if (prods) setProductos(prods);

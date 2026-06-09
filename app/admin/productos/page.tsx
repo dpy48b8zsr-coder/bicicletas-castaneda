@@ -74,16 +74,16 @@ export default function ProductosPage() {
   // Mensajes
   const [mensaje, setMensaje] = useState<{ tipo: "exito" | "error"; texto: string } | null>(null);
 
-  const cargarDatos = async () => {
-    setCargando(true);
-    const [resProductos, resCategorias] = await Promise.all([
-      supabase.from("productos").select("*").eq("sucursal_id", sucursalId).order("nombre"),
-      supabase.from("categorias").select("*").order("nombre"),
-    ]);
-    if (resProductos.data) setProductos(resProductos.data);
-    if (resCategorias.data) setCategorias(resCategorias.data);
-    setCargando(false);
-  };
+ const cargarDatos = async () => {
+  setCargando(true);
+  const [resProductos, resCategorias] = await Promise.all([
+    supabase.from("productos").select("*").eq("sucursal_id", sucursalId).eq("activo", true).order("nombre"),
+    supabase.from("categorias").select("*").order("nombre"),
+  ]);
+  if (resProductos.data) setProductos(resProductos.data);
+  if (resCategorias.data) setCategorias(resCategorias.data);
+  setCargando(false);
+};
 
   useEffect(() => {
     cargarDatos();
@@ -310,10 +310,10 @@ export default function ProductosPage() {
   };
 
   const eliminarProducto = async (id: string) => {
-    await supabase.from("productos").delete().eq("id", id);
-    setEliminandoId(null);
-    cargarDatos();
-  };
+  await supabase.from("productos").update({ activo: false }).eq("id", id);
+  setEliminandoId(null);
+  cargarDatos();
+};
 
   // Gestión de categorías
   const abrirGestionCategorias = () => {
@@ -458,12 +458,12 @@ export default function ProductosPage() {
   >
     ✏️ Editar
   </button>
-  <button
-    onClick={() => setEliminandoId(producto.id)}
-    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 text-xs font-medium transition-colors"
-  >
-    🗑️ Eliminar
-  </button>
+ <button
+  onClick={() => setEliminandoId(producto.id)}
+  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 text-xs font-medium transition-colors"
+>
+  🗑️ Desactivar
+</button>
 </div>
                     </td>
                   </tr>
@@ -509,11 +509,11 @@ export default function ProductosPage() {
     ✏️ Editar
   </button>
   <button
-    onClick={() => setEliminandoId(producto.id)}
-    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 text-xs font-medium transition-colors"
-  >
-    🗑️ Eliminar
-  </button>
+  onClick={() => setEliminandoId(producto.id)}
+  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 text-xs font-medium transition-colors"
+>
+  🗑️ Desactivar
+</button>
 </div>
                 </div>
               </div>
@@ -829,28 +829,28 @@ export default function ProductosPage() {
       )}
 
       {/* Confirmación eliminar producto */}
-      {eliminandoId && (
-        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm border border-gray-200">
-            <h3 className="text-lg font-bold text-gray-900 mb-2">¿Eliminar producto?</h3>
-            <p className="text-gray-700 mb-4">Esta acción no se puede deshacer.</p>
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={() => setEliminandoId(null)}
-                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg font-medium transition"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={() => eliminarProducto(eliminandoId)}
-                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition"
-              >
-                Eliminar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+    {eliminandoId && (
+  <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm border border-gray-200">
+      <h3 className="text-lg font-bold text-gray-900 mb-2">¿Desactivar producto?</h3>
+      <p className="text-gray-700 mb-4">El producto se ocultará del inventario pero se conservará el historial de ventas.</p>
+      <div className="flex justify-end gap-3">
+        <button
+          onClick={() => setEliminandoId(null)}
+          className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg font-medium transition"
+        >
+          Cancelar
+        </button>
+        <button
+          onClick={() => eliminarProducto(eliminandoId)}
+          className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition"
+        >
+          Desactivar
+        </button>
+      </div>
+    </div>
+  </div>
+)}
     </div>
   );
 }

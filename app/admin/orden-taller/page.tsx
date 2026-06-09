@@ -97,17 +97,20 @@ function OrdenTallerPage() {
     ] = await Promise.all([
       supabase.from("ordenes_taller")
         .select("*, clientes(nombre)")
-        .eq("sucursal_id", sucursalId)
+       .eq("activo", true)
+.eq("sucursal_id", sucursalId)
         .order("created_at", { ascending: false }),
       supabase.from("clientes").select("id, nombre").order("nombre"),
       supabase.from("citas_taller")
         .select("id, fecha_hora, clientes(nombre)")
-        .eq("sucursal_id", sucursalId)
+        .eq("activo", true)
+.eq("sucursal_id", sucursalId)
         .order("fecha_hora", { ascending: false })
         .limit(20),
       supabase.from("productos")
         .select("id, nombre, precio, stock")
-        .eq("sucursal_id", sucursalId)
+        .eq("activo", true)
+.eq("sucursal_id", sucursalId)
         .order("nombre"),
     ]);
     if (ordenesData) setOrdenes(ordenesData);
@@ -155,7 +158,8 @@ function OrdenTallerPage() {
       const { data } = await supabase
         .from("productos")
         .select("id, nombre, precio, stock")
-        .eq("sucursal_id", sucursalId)
+        .eq("activo", true)
+.eq("sucursal_id", sucursalId)
         .or(`nombre.ilike.${term},sku.ilike.${term},codigo_barras.ilike.${term}`)
         .limit(5);
       if (data) setResultadosBusqueda(data);

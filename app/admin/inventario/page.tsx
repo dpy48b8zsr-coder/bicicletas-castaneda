@@ -54,6 +54,7 @@ export default function InventarioPage() {
     const { data: movs, error: movsError } = await supabase
       .from("movimientos_inventario")
       .select("*, productos(nombre, sku)")
+      .eq("activo", true)
       .eq("sucursal_id", sucursalId)
       .order("created_at", { ascending: false })
       .limit(50);
@@ -64,7 +65,8 @@ export default function InventarioPage() {
     const { data: prods } = await supabase
       .from("productos")
       .select("id, nombre, sku, codigo_barras, stock")
-      .eq("sucursal_id", sucursalId)
+     .eq("activo", true)
+     .eq("sucursal_id", sucursalId)
       .order("nombre");
     if (prods) setProductos(prods);
 
@@ -88,6 +90,7 @@ export default function InventarioPage() {
       const { data, error } = await supabase
         .from("productos")
         .select("id, nombre, sku, codigo_barras, stock")
+        .eq("activo", true)
         .eq("sucursal_id", sucursalId)
         .or(`nombre.ilike.${term},sku.ilike.${term},codigo_barras.ilike.${term}`)
         .limit(10);

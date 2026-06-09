@@ -43,7 +43,8 @@ export default function TransferenciasPage() {
       const { data } = await supabase
         .from("productos")
         .select("*")
-        .eq("sucursal_id", sucursalOrigen)
+        .eq("activo", true)
+.eq("sucursal_id", sucursalOrigen)
         .or(`nombre.ilike.${term},sku.ilike.${term},codigo_barras.ilike.${term}`)
         .limit(10);
       setResultados(data || []);
