@@ -98,14 +98,16 @@ export default function AgendarTallerPage() {
     ] = await Promise.all([
       supabase.from("citas_taller")
         .select("*, clientes(nombre)")
-        .eq("sucursal_id", sucursalId)
+        .eq("activo", true)
+.eq("sucursal_id", sucursalId)
         .gte("fecha_hora", inicio)
         .lte("fecha_hora", fin)
         .order("fecha_hora", { ascending: true }),
       supabase.from("clientes").select("id, nombre").order("nombre"),
       supabase.from("productos")
         .select("id, nombre, precio, stock")
-        .eq("sucursal_id", sucursalId)
+        .eq("activo", true)
+.eq("sucursal_id", sucursalId)
         .order("nombre"),
     ]);
 
@@ -255,7 +257,8 @@ export default function AgendarTallerPage() {
       const { data } = await supabase
         .from("productos")
         .select("id, nombre, precio, stock")
-        .eq("sucursal_id", sucursalId)
+        .eq("activo", true)
+.eq("sucursal_id", sucursalId)
         .or(`nombre.ilike.${term},sku.ilike.${term},codigo_barras.ilike.${term}`)
         .limit(5);
       if (data) setResultadosBusqueda(data);
