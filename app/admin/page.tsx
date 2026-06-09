@@ -313,7 +313,7 @@ function CajaModal({ onClose, sucursalId }: { onClose: () => void; sucursalId?: 
               <label className="block text-sm font-semibold text-gray-900 mb-1">Monto inicial (para este turno)</label>
               <div className="flex gap-2">
                 <input type="text" inputMode="decimal" value={montoInicialInput} onChange={(e) => { const val = e.target.value; if (val === "" || /^\d*\.?\d*$/.test(val)) setMontoInicialInput(val); }} className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="0.00" />
-                <button onClick={guardarMontoInicial} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium">Guardar</button>
+                <button onClick={guardarMontoInicial} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 rounded-lg text-sm font-medium">Guardar</button>
               </div>
               {mensaje && <p className="text-xs text-blue-700 mt-1">{mensaje}</p>}
             </div>
@@ -369,7 +369,7 @@ function CajaModal({ onClose, sucursalId }: { onClose: () => void; sucursalId?: 
                   <div><label className="block text-xs font-medium text-gray-900 mb-1">Comentario</label><input type="text" value={comentarioCorte} onChange={(e) => setComentarioCorte(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" /></div>
                   <div className="col-span-2"><label className="block text-xs font-medium text-gray-900 mb-1">Dinero que se deja en caja para el siguiente turno ($)</label><input type="text" inputMode="decimal" value={montoDejar} onChange={(e) => { const val = e.target.value; if (val === "" || /^\d*\.?\d*$/.test(val)) setMontoDejar(val); }} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" /></div>
                 </div>
-                <button onClick={realizarCorte} className="mt-3 w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-lg text-sm">Realizar Corte</button>
+                <button onClick={realizarCorte} className="mt-3 w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-lg text-sm">Realizar Corte</button>
               </div>
               <details>
                 <summary className="text-sm text-green-700 font-medium cursor-pointer">Ver últimos cortes</summary>
@@ -386,7 +386,7 @@ function CajaModal({ onClose, sucursalId }: { onClose: () => void; sucursalId?: 
           </>
         )}
         <div className="flex justify-end mt-4">
-          <button onClick={onClose} className="px-5 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-900 rounded-lg font-medium transition">Cerrar</button>
+          <button onClick={onClose} className="px-5 py-3 bg-gray-200 hover:bg-gray-300 text-gray-900 rounded-lg font-medium transition">Cerrar</button>
         </div>
       </div>
     </div>
@@ -545,6 +545,18 @@ function PosPage() {
     };
     cargarPresupuestoEnCarrito();
   }, [presupuestoParam]);
+
+  // Bloquear scroll de fondo cuando el modal de caja está abierto
+useEffect(() => {
+  if (mostrarModalCaja) {
+    document.body.style.overflow = 'hidden';
+  } else {
+    document.body.style.overflow = '';
+  }
+  return () => {
+    document.body.style.overflow = '';
+  };
+}, [mostrarModalCaja]);
 
   // Efecto para convertir orden de taller en venta
   useEffect(() => {
@@ -1076,8 +1088,16 @@ function PosPage() {
 
         {/* Modal Producto Común */}
         {mostrarProductoComun && (
-          <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-xl shadow-xl p-5 w-full max-w-sm border border-gray-200">
+          <div
+  className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+  onClick={(e) => {
+    if (e.target === e.currentTarget) onClose();
+  }}
+>
+  <div
+    className="bg-white rounded-xl shadow-xl p-6 w-full max-w-lg border border-gray-200 max-h-[90vh] overflow-y-auto"
+    style={{ overscrollBehavior: 'contain' }}
+  >
               <h3 className="text-lg font-bold text-gray-900 mb-3">Producto común (sin inventario)</h3>
               <div className="space-y-3">
                 <div><label className="block text-sm font-semibold text-gray-900 mb-1">Nombre</label><input type="text" value={productoComunNombre} onChange={(e) => setProductoComunNombre(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 placeholder-gray-500" placeholder="Ej: Reparación exprés" /></div>
