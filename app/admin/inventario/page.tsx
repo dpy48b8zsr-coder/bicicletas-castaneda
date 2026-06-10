@@ -54,19 +54,18 @@ export default function InventarioPage() {
     const { data: movs, error: movsError } = await supabase
       .from("movimientos_inventario")
       .select("*, productos(nombre, sku)")
-      .eq("activo", true)
       .eq("sucursal_id", sucursalId)
       .order("created_at", { ascending: false })
       .limit(50);
 
     if (!movsError && movs) setMovimientos(movs);
 
-    // Productos filtrados por sucursal (para la búsqueda y selección)
+    // Productos filtrados por sucursal y activos
     const { data: prods } = await supabase
       .from("productos")
       .select("id, nombre, sku, codigo_barras, stock")
-     .eq("activo", true)
-     .eq("sucursal_id", sucursalId)
+      .eq("sucursal_id", sucursalId)
+      .eq("activo", true)
       .order("nombre");
     if (prods) setProductos(prods);
 
@@ -77,7 +76,7 @@ export default function InventarioPage() {
     cargarDatos();
   }, [sucursalId]);
 
-  // Búsqueda de productos (también filtrada por sucursal)
+  // Búsqueda de productos (también filtrada por sucursal y activos)
   useEffect(() => {
     if (busquedaProducto.trim() === "") {
       setResultadosBusqueda([]);
@@ -90,8 +89,8 @@ export default function InventarioPage() {
       const { data, error } = await supabase
         .from("productos")
         .select("id, nombre, sku, codigo_barras, stock")
-        .eq("activo", true)
         .eq("sucursal_id", sucursalId)
+        .eq("activo", true)
         .or(`nombre.ilike.${term},sku.ilike.${term},codigo_barras.ilike.${term}`)
         .limit(10);
 
