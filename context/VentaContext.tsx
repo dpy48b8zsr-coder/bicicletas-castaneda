@@ -28,6 +28,8 @@ interface TicketData {
   clientePuntos: number;
   puntosACanjear: number;
   descuentoPuntos: number;
+  descuentoManual: number;
+  descuentoManualTipo: "porcentaje" | "monto";
 }
 
 interface VentaContextType {
@@ -47,6 +49,10 @@ interface VentaContextType {
   setPuntosACanjear: (puntos: number) => void;
   descuentoPuntos: number;
   setDescuentoPuntos: (descuento: number) => void;
+  descuentoManual: number;
+  setDescuentoManual: (descuento: number) => void;
+  descuentoManualTipo: "porcentaje" | "monto";
+  setDescuentoManualTipo: (tipo: "porcentaje" | "monto") => void;
   crearNuevoTicket: () => void;
   cambiarTicket: (id: string) => void;
   cerrarTicket: (id: string) => void;
@@ -60,7 +66,7 @@ function generarId() {
 
 export function VentaProvider({ children }: { children: ReactNode }) {
   const [tickets, setTickets] = useState<TicketData[]>([
-    { id: generarId(), carrito: [], clienteSeleccionado: "", clientePuntos: 0, puntosACanjear: 0, descuentoPuntos: 0 }
+    { id: generarId(), carrito: [], clienteSeleccionado: "", clientePuntos: 0, puntosACanjear: 0, descuentoPuntos: 0, descuentoManual: 0, descuentoManualTipo: "monto" }
   ]);
   const [ticketActivoId, setTicketActivoId] = useState(tickets[0].id);
 
@@ -105,6 +111,8 @@ export function VentaProvider({ children }: { children: ReactNode }) {
       clientePuntos: 0,
       puntosACanjear: 0,
       descuentoPuntos: 0,
+      descuentoManual: 0,
+      descuentoManualTipo: "monto",
     }));
   }, [actualizarTicketActivo]);
 
@@ -124,6 +132,14 @@ export function VentaProvider({ children }: { children: ReactNode }) {
     actualizarTicketActivo(ticket => ({ ...ticket, descuentoPuntos: descuento }));
   }, [actualizarTicketActivo]);
 
+  const setDescuentoManual = useCallback((descuento: number) => {
+    actualizarTicketActivo(ticket => ({ ...ticket, descuentoManual: descuento }));
+  }, [actualizarTicketActivo]);
+
+  const setDescuentoManualTipo = useCallback((tipo: "porcentaje" | "monto") => {
+    actualizarTicketActivo(ticket => ({ ...ticket, descuentoManualTipo: tipo }));
+  }, [actualizarTicketActivo]);
+
   const crearNuevoTicket = useCallback(() => {
     const nuevoTicket: TicketData = {
       id: generarId(),
@@ -132,6 +148,8 @@ export function VentaProvider({ children }: { children: ReactNode }) {
       clientePuntos: 0,
       puntosACanjear: 0,
       descuentoPuntos: 0,
+      descuentoManual: 0,
+      descuentoManualTipo: "monto",
     };
     setTickets(prev => [...prev, nuevoTicket]);
     setTicketActivoId(nuevoTicket.id);
@@ -145,7 +163,7 @@ export function VentaProvider({ children }: { children: ReactNode }) {
     setTickets(prev => {
       const nuevos = prev.filter(t => t.id !== id);
       if (nuevos.length === 0) {
-        const unico = { id: generarId(), carrito: [], clienteSeleccionado: "", clientePuntos: 0, puntosACanjear: 0, descuentoPuntos: 0 };
+        const unico = { id: generarId(), carrito: [], clienteSeleccionado: "", clientePuntos: 0, puntosACanjear: 0, descuentoPuntos: 0, descuentoManual: 0, descuentoManualTipo: "monto" };
         return [unico];
       }
       return nuevos;
@@ -160,7 +178,10 @@ export function VentaProvider({ children }: { children: ReactNode }) {
   }, [tickets]);
 
   const subtotal = ticketActivo.carrito.reduce((acc, item) => acc + item.producto.precio * item.cantidad, 0);
-  const total = subtotal - ticketActivo.descuentoPuntos;
+  const montoDescuentoManual = ticketActivo.descuentoManualTipo === "porcentaje"
+    ? (subtotal * ticketActivo.descuentoManual) / 100
+    : ticketActivo.descuentoManual;
+  const total = subtotal - ticketActivo.descuentoPuntos - montoDescuentoManual;
 
   return (
     <VentaContext.Provider
@@ -181,6 +202,10 @@ export function VentaProvider({ children }: { children: ReactNode }) {
         setPuntosACanjear,
         descuentoPuntos: ticketActivo.descuentoPuntos,
         setDescuentoPuntos,
+        descuentoManual: ticketActivo.descuentoManual,
+        setDescuentoManual,
+        descuentoManualTipo: ticketActivo.descuentoManualTipo,
+        setDescuentoManualTipo,
         crearNuevoTicket,
         cambiarTicket,
         cerrarTicket,

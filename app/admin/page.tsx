@@ -71,6 +71,8 @@ interface TicketData {
   puntosGanados: number;
   puntosCanjeados: number;
   descuentoPuntos: number;
+  descuentoManual?: number;
+  descuentoManualTipo?: "porcentaje" | "monto";
 }
 
 interface MovimientoCaja {
@@ -392,6 +394,7 @@ function PosPage() {
     agregarAlCarrito,
     eliminarDelCarrito,
     vaciarCarrito,
+    subtotal,
     total,
     clienteSeleccionado,
     setClienteSeleccionado,
@@ -401,6 +404,10 @@ function PosPage() {
     setPuntosACanjear,
     descuentoPuntos,
     setDescuentoPuntos,
+    descuentoManual,
+    setDescuentoManual,
+    descuentoManualTipo,
+    setDescuentoManualTipo,
     crearNuevoTicket,
     cambiarTicket,
     cerrarTicket,
@@ -680,6 +687,7 @@ function PosPage() {
       setClientePuntos(data.puntos);
       setPuntosACanjear(0);
       setDescuentoPuntos(0);
+      setDescuentoManual(0);
       setNuevoNombreCliente("");
       setNuevoTelefonoCliente("");
       setMostrarNuevoCliente(false);
@@ -745,12 +753,12 @@ function PosPage() {
       const nuevosPuntos = clientePuntos - puntosACanjear + ventaPayload.puntos_ganados;
       await supabase.from("clientes").update({ puntos: nuevosPuntos }).eq("id", clienteSeleccionado);
     }
-    setTicketData({ ventaId, items: [...carrito], total, metodoPago: metodoSeleccionado, montoRecibido: montoRec, cambio: cambioVal, pagosParciales: metodoSeleccionado === "mixto" ? ventaPayload.detalle_pago : undefined, clienteId: clienteSeleccionado || undefined, fecha: fechaVenta, puntosGanados: ventaPayload.puntos_ganados || 0, puntosCanjeados: puntosACanjear, descuentoPuntos });
+    setTicketData({ ventaId, items: [...carrito], total, metodoPago: metodoSeleccionado, montoRecibido: montoRec, cambio: cambioVal, pagosParciales: metodoSeleccionado === "mixto" ? ventaPayload.detalle_pago : undefined, clienteId: clienteSeleccionado || undefined, fecha: fechaVenta, puntosGanados: ventaPayload.puntos_ganados || 0, puntosCanjeados: puntosACanjear, descuentoPuntos, descuentoManual, descuentoManualTipo });
     if (clienteSeleccionado) { const cli = clientes.find(c => c.id === clienteSeleccionado); setWhatsappNumero(cli?.telefono || ""); } else setWhatsappNumero("");
     vaciarCarrito();
     setCobrando(false);
     cargarMetricas();
-  }, [carrito, total, metodoSeleccionado, montoRecibido, clienteSeleccionado, clientes, pagosMixto, sumaPagosMixto, puntosACanjear, descuentoPuntos, clientePuntos, sucursalId]);
+  }, [carrito, total, metodoSeleccionado, montoRecibido, clienteSeleccionado, clientes, pagosMixto, sumaPagosMixto, puntosACanjear, descuentoPuntos, descuentoManual, descuentoManualTipo, clientePuntos, sucursalId]);
 
   const cerrarModalTicket = () => { setTicketData(null); setWhatsappNumero(""); };
 
@@ -776,6 +784,12 @@ function PosPage() {
     ticketData.items.forEach(item => {
       mensaje += `- ${item.producto.nombre} x${item.cantidad}: $${(item.producto.precio * item.cantidad).toFixed(2)}\n`;
     });
+    if (descuentoManual > 0) {
+      const montoDescManual = descuentoManualTipo === "porcentaje"
+        ? ((subtotal * descuentoManual) / 100)
+        : descuentoManual;
+      mensaje += `\n*Descuento (${descuentoManualTipo === "porcentaje" ? descuentoManual + "%" : "$" + descuentoManual.toFixed(2)}):* -$${montoDescManual.toFixed(2)}\n`;
+    }
     if (ticketData.descuentoPuntos > 0) mensaje += `\n*Descuento por puntos:* -$${ticketData.descuentoPuntos.toFixed(2)}\n`;
     mensaje += `\n*Total: $${ticketData.total.toFixed(2)}*\nMétodo: ${ticketData.metodoPago}\n`;
     if (ticketData.montoRecibido !== undefined) {
@@ -811,6 +825,10 @@ function PosPage() {
     const taller = configTicket.nombre_taller || "Bicicletas Castañeda";
     const direccion = configTicket.direccion || "";
     const telefono = configTicket.telefono || "";
+
+    const montoDescManual = descuentoManualTipo === "porcentaje"
+      ? ((subtotal * descuentoManual) / 100)
+      : descuentoManual;
 
     const html = `
       <html>
@@ -851,6 +869,14 @@ function PosPage() {
             <p>${new Date(ticketData.fecha).toLocaleString("es-MX")}</p>
             <hr>
             ${lineasHTML}
+            ${
+              descuentoManual > 0
+                ? `<div style="display: flex; justify-content: space-between; font-size: 12px; padding: 2px 0;">
+                    <span>Descuento (${descuentoManualTipo === "porcentaje" ? descuentoManual + "%" : "$" + descuentoManual.toFixed(2)})</span>
+                    <span>-$${montoDescManual.toFixed(2)}</span>
+                  </div>`
+                : ""
+            }
             ${
               ticketData.descuentoPuntos > 0
                 ? `<div style="display: flex; justify-content: space-between; font-size: 12px; padding: 2px 0;">
@@ -1076,10 +1102,47 @@ function PosPage() {
                     <div className="flex items-center gap-2 mt-1"><input type="number" min="0" max={clientePuntos} value={puntosACanjear || ""} onChange={(e) => handlePuntosCanjearChange(parseInt(e.target.value) || 0)} placeholder="Canjear pts" className="w-20 border border-gray-300 rounded px-1 py-0.5 text-xs" /><span className="text-xs text-gray-500">10 pts = $1</span></div>
                   </div>
                 )}
+
+                {/* Descuento manual */}
+                <div className="mt-2 bg-yellow-50 rounded-lg p-2 border border-yellow-200">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-yellow-800 font-medium">Descuento:</span>
+                    <select
+                      value={descuentoManualTipo}
+                      onChange={(e) => setDescuentoManualTipo(e.target.value as "porcentaje" | "monto")}
+                      className="text-xs border border-gray-300 rounded px-1 py-0.5 bg-white text-gray-900"
+                    >
+                      <option value="monto">$</option>
+                      <option value="porcentaje">%</option>
+                    </select>
+                    <input
+                      type="number"
+                      min="0"
+                      value={descuentoManual || ""}
+                      onChange={(e) => setDescuentoManual(parseFloat(e.target.value) || 0)}
+                      className="w-20 border border-gray-300 rounded px-1 py-0.5 text-xs text-gray-900"
+                      placeholder="0"
+                    />
+                  </div>
+                  {descuentoManual > 0 && (
+                    <p className="text-xs text-yellow-700 mt-1">
+                      Descuento aplicado: -$
+                      {descuentoManualTipo === "porcentaje"
+                        ? ((subtotal * descuentoManual) / 100).toFixed(2)
+                        : descuentoManual.toFixed(2)}
+                    </p>
+                  )}
+                </div>
               </div>
 
               <div className="border-t border-gray-200 pt-2 mt-2">
                 {descuentoPuntos > 0 && <div className="flex justify-between text-xs text-green-700 mb-1"><span>Descuento puntos</span><span>-${descuentoPuntos.toFixed(2)}</span></div>}
+                {descuentoManual > 0 && (
+                  <div className="flex justify-between text-xs text-yellow-700 mb-1">
+                    <span>Descuento ({descuentoManualTipo === "porcentaje" ? descuentoManual + "%" : "$" + descuentoManual.toFixed(2)})</span>
+                    <span>-${descuentoManualTipo === "porcentaje" ? ((subtotal * descuentoManual) / 100).toFixed(2) : descuentoManual.toFixed(2)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between items-center text-base font-bold mb-2"><span className="text-gray-800">Total</span><span className="text-green-600 text-lg">${total.toFixed(2)}</span></div>
                 <button onClick={abrirModalCobro} disabled={cobrando} className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-lg text-sm shadow-sm disabled:opacity-50 transition-colors">{cobrando ? "Procesando..." : `Cobrar $${total.toFixed(2)}`}</button>
               </div>
