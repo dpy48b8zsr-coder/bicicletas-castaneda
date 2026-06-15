@@ -19,6 +19,8 @@ interface Producto {
 interface ItemCarrito {
   producto: Producto;
   cantidad: number;
+  descuento: number;
+  descuentoTipo: "porcentaje" | "monto";
 }
 
 interface TicketData {
@@ -38,6 +40,7 @@ interface VentaContextType {
   carrito: ItemCarrito[];
   agregarAlCarrito: (producto: Producto) => void;
   eliminarDelCarrito: (id: string) => void;
+  actualizarDescuentoItem: (id: string, descuento: number, tipo: "porcentaje" | "monto") => void;
   vaciarCarrito: () => void;
   subtotal: number;
   total: number;
@@ -90,7 +93,7 @@ export function VentaProvider({ children }: { children: ReactNode }) {
           };
         return ticket;
       }
-      return { ...ticket, carrito: [...ticket.carrito, { producto, cantidad: 1 }] };
+      return { ...ticket, carrito: [...ticket.carrito, { producto, cantidad: 1, descuento: 0, descuentoTipo: "monto" }] };
     });
   }, [actualizarTicketActivo]);
 
@@ -102,6 +105,15 @@ export function VentaProvider({ children }: { children: ReactNode }) {
         .filter(item => item.cantidad > 0)
     }));
   }, [actualizarTicketActivo]);
+
+  const actualizarDescuentoItem = useCallback((id: string, descuento: number, tipo: "porcentaje" | "monto") => {
+  actualizarTicketActivo(ticket => ({
+    ...ticket,
+    carrito: ticket.carrito.map(item =>
+      item.producto.id === id ? { ...item, descuento, descuentoTipo: tipo } : item
+    )
+  }));
+}, [actualizarTicketActivo]);
 
   const vaciarCarrito = useCallback(() => {
     actualizarTicketActivo(ticket => ({
@@ -209,6 +221,7 @@ export function VentaProvider({ children }: { children: ReactNode }) {
         crearNuevoTicket,
         cambiarTicket,
         cerrarTicket,
+        actualizarDescuentoItem,
       }}
     >
       {children}

@@ -123,11 +123,11 @@ function CajaModal({ onClose, sucursalId }: { onClose: () => void; sucursalId?: 
   const [cargando, setCargando] = useState(true);
 
   const hoyStr = new Date().toISOString().slice(0, 10);
-  const { inicio: inicioDia, fin: finDia } = obtenerRangoDiaLocal();
 
   const cargarDatosCaja = async () => {
     setCargando(true);
     try {
+      // 1. Buscar el último corte de esta sucursal (de cualquier día)
       const { data: ultimoCorte } = await supabase
         .from("cortes_caja")
         .select("fecha_fin, efectivo_real")
@@ -136,23 +136,17 @@ function CajaModal({ onClose, sucursalId }: { onClose: () => void; sucursalId?: 
         .limit(1)
         .maybeSingle();
 
-      let inicioEfectivo = inicioDia;
+      let inicioEfectivo: string;
       let montoInicial = 0;
 
       if (ultimoCorte?.fecha_fin) {
-        const fechaCorte = new Date(ultimoCorte.fecha_fin);
-        if (fechaCorte >= new Date(inicioDia)) {
-          inicioEfectivo = fechaCorte.toISOString();
-          montoInicial = ultimoCorte.efectivo_real || 0;
-        } else {
-          const { data: cajaInicial } = await supabase
-            .from("caja_diaria")
-            .select("monto_inicial")
-            .eq("fecha", hoyStr)
-            .maybeSingle();
-          montoInicial = cajaInicial?.monto_inicial || 0;
-        }
+        // El inicio del periodo actual es justo después del último corte
+        inicioEfectivo = ultimoCorte.fecha_fin;
+        // El dinero que se dejó en caja en ese corte es el nuevo monto inicial
+        montoInicial = ultimoCorte.efectivo_real || 0;
       } else {
+        // No hay cortes previos: tomamos el inicio del día y el monto inicial de caja_diaria
+        inicioEfectivo = new Date().toISOString().slice(0, 10) + "T00:00:00";
         const { data: cajaInicial } = await supabase
           .from("caja_diaria")
           .select("monto_inicial")
@@ -161,32 +155,39 @@ function CajaModal({ onClose, sucursalId }: { onClose: () => void; sucursalId?: 
         montoInicial = cajaInicial?.monto_inicial || 0;
       }
 
-      const [
-        { data: ventas },
-        { data: abonos },
-        { data: movs },
-        { data: cortesData },
-      ] = await Promise.all([
-        supabase.from("ventas").select("total, metodo_pago, detalle_pago, created_at")
-          .eq("sucursal_id", sucursalId)
-          .gte("created_at", inicioEfectivo)
-          .lte("created_at", finDia),
-        supabase.from("abonos_credito").select("monto, metodo_pago")
-          .eq("sucursal_id", sucursalId)
-          .gte("created_at", inicioEfectivo)
-          .lte("created_at", finDia),
-        supabase.from("movimientos_caja").select("*")
-          .eq("sucursal_id", sucursalId)
-          .gte("created_at", inicioEfectivo)
-          .lte("created_at", finDia)
-          .order("created_at", { ascending: false }),
-        supabase.from("cortes_caja").select("*")
-          .eq("sucursal_id", sucursalId)
-          .order("created_at", { ascending: false })
-          .limit(10),
-      ]);
+      // 2. Ventas desde el último corte
+      const { data: ventas } = await supabase
+        .from("ventas")
+        .select("total, metodo_pago, detalle_pago, created_at")
+        .eq("sucursal_id", sucursalId)
+        .gte("created_at", inicioEfectivo)
+        .order("created_at", { ascending: false });
+
+      // 3. Abonos desde el último corte
+      const { data: abonos } = await supabase
+        .from("abonos_credito")
+        .select("monto, metodo_pago")
+        .eq("sucursal_id", sucursalId)
+        .gte("created_at", inicioEfectivo);
+
+      // 4. Movimientos de caja
+      const { data: movs } = await supabase
+        .from("movimientos_caja")
+        .select("*")
+        .eq("sucursal_id", sucursalId)
+        .gte("created_at", inicioEfectivo)
+        .order("created_at", { ascending: false });
+
+      // 5. Últimos cortes para el historial
+      const { data: cortesData } = await supabase
+        .from("cortes_caja")
+        .select("*")
+        .eq("sucursal_id", sucursalId)
+        .order("created_at", { ascending: false })
+        .limit(10);
 
       let efectivo = 0, tarjeta = 0, transferencia = 0, credito = 0, total = 0;
+
       if (ventas) {
         ventas.forEach((v) => {
           total += v.total;
@@ -204,6 +205,7 @@ function CajaModal({ onClose, sucursalId }: { onClose: () => void; sucursalId?: 
           }
         });
       }
+
       if (abonos) {
         abonos.forEach((a) => {
           if (a.metodo_pago === "efectivo") efectivo += a.monto;
@@ -229,6 +231,7 @@ function CajaModal({ onClose, sucursalId }: { onClose: () => void; sucursalId?: 
 
   const guardarMontoInicial = async () => {
     const monto = parseFloat(montoInicialInput) || 0;
+    // Guardamos en caja_diaria solo como referencia, pero el monto real se toma del último corte.
     await supabase.from("caja_diaria").upsert({ fecha: hoyStr, monto_inicial: monto }, { onConflict: "fecha" });
     setCajaData(prev => ({ ...prev, montoInicial: monto }));
     setMensaje("Monto inicial actualizado");
@@ -257,8 +260,9 @@ function CajaModal({ onClose, sucursalId }: { onClose: () => void; sucursalId?: 
     const dejar = parseFloat(montoDejar) || 0;
     const ahora = new Date().toISOString();
 
-    await supabase.from("cortes_caja").insert({
-      fecha_inicio: inicioDia,
+    // Registrar el corte con los totales acumulados desde el último corte
+    const { error: corteError } = await supabase.from("cortes_caja").insert({
+      fecha_inicio: cajaData.montoInicial > 0 ? undefined : new Date().toISOString().slice(0, 10) + "T00:00:00", // solo informativo
       fecha_fin: ahora,
       total_ventas: cajaData.total,
       efectivo: cajaData.efectivo,
@@ -271,6 +275,12 @@ function CajaModal({ onClose, sucursalId }: { onClose: () => void; sucursalId?: 
       sucursal_id: sucursalId,
     });
 
+    if (corteError) {
+      setMensaje("Error al registrar el corte: " + corteError.message);
+      return;
+    }
+
+    // El monto que se deja en caja se guarda como nuevo monto inicial para el siguiente periodo
     await supabase.from("caja_diaria").upsert({ fecha: hoyStr, monto_inicial: dejar }, { onConflict: "fecha" });
 
     setEfectivoRealCorte("");
@@ -281,6 +291,7 @@ function CajaModal({ onClose, sucursalId }: { onClose: () => void; sucursalId?: 
     cargarDatosCaja();
   };
 
+  // Efectivo total en caja: monto inicial + ventas en efectivo + abonos en efectivo + entradas - salidas
   const totalEfectivo = () => {
     const entradas = movimientos.filter(m => m.tipo === "entrada").reduce((a, m) => a + m.monto, 0);
     const salidas = movimientos.filter(m => m.tipo === "salida").reduce((a, m) => a + m.monto, 0);
@@ -290,7 +301,7 @@ function CajaModal({ onClose, sucursalId }: { onClose: () => void; sucursalId?: 
   return (
     <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-lg border border-gray-200 max-h-[90vh] overflow-y-auto" style={{ overscrollBehavior: 'contain' }}>
-        <h2 className="text-xl font-bold text-gray-900 mb-4">💰 Caja del Día</h2>
+        <h2 className="text-xl font-bold text-gray-900 mb-4">💰 Caja</h2>
         {cargando ? (
           <p className="text-center text-gray-800 py-8">Cargando caja...</p>
         ) : (
@@ -316,6 +327,7 @@ function CajaModal({ onClose, sucursalId }: { onClose: () => void; sucursalId?: 
                 <span className="text-sm font-semibold text-gray-900">Efectivo en caja</span>
                 <span className="text-2xl font-bold text-gray-900">${totalEfectivo().toFixed(2)}</span>
               </div>
+              <p className="text-xs text-gray-500 mt-1">Inicial + ventas en efectivo + abonos + entradas - salidas</p>
             </div>
 
             <div className="mb-4">
@@ -351,7 +363,7 @@ function CajaModal({ onClose, sucursalId }: { onClose: () => void; sucursalId?: 
               <h3 className="text-lg font-semibold text-gray-900 mb-3">Corte de Caja</h3>
               <div className="bg-gray-50 rounded-lg p-4 mb-4 border border-gray-200">
                 <div className="grid grid-cols-2 gap-3">
-                  <div><label className="block text-xs font-medium text-gray-900 mb-1">Efectivo contado ($)</label><input type="text" inputMode="decimal" value={efectivoRealCorte} onChange={(e) => { const val = e.target.value; if (val === "" || /^\d*\.?\d*$/.test(val)) setEfectivoRealCorte(val); }} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" /><p className="text-xs text-gray-700 mt-1">Esperado: ${cajaData.efectivo.toFixed(2)}</p></div>
+                  <div><label className="block text-xs font-medium text-gray-900 mb-1">Efectivo contado ($)</label><input type="text" inputMode="decimal" value={efectivoRealCorte} onChange={(e) => { const val = e.target.value; if (val === "" || /^\d*\.?\d*$/.test(val)) setEfectivoRealCorte(val); }} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" /><p className="text-xs text-gray-700 mt-1">Esperado: ${totalEfectivo().toFixed(2)}</p></div>
                   <div><label className="block text-xs font-medium text-gray-900 mb-1">Comentario</label><input type="text" value={comentarioCorte} onChange={(e) => setComentarioCorte(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" /></div>
                   <div className="col-span-2"><label className="block text-xs font-medium text-gray-900 mb-1">Dinero que se deja en caja para el siguiente turno ($)</label><input type="text" inputMode="decimal" value={montoDejar} onChange={(e) => { const val = e.target.value; if (val === "" || /^\d*\.?\d*$/.test(val)) setMontoDejar(val); }} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" /></div>
                 </div>
@@ -393,6 +405,7 @@ function PosPage() {
     carrito,
     agregarAlCarrito,
     eliminarDelCarrito,
+    actualizarDescuentoItem,
     vaciarCarrito,
     subtotal,
     total,
@@ -443,6 +456,7 @@ function PosPage() {
 
   // NUEVO: Filtro de stock bajo activo/inactivo
   const [filtroStockBajo, setFiltroStockBajo] = useState(false);
+  const [menuAbiertoId, setMenuAbiertoId] = useState<string | null>(null);
 
   const [configTicket, setConfigTicket] = useState({
     nombre_taller: "Bicicletas Castañeda",
@@ -1073,12 +1087,110 @@ function PosPage() {
           {carrito.length === 0 ? <div className="flex-1 flex flex-col items-center justify-center text-gray-500 text-sm py-8">Carrito vacío</div> : (
             <div className="flex flex-col flex-1 min-h-0">
               <div className="flex-1 overflow-y-auto space-y-2 pr-1" style={{ maxHeight: "calc(100vh - 28rem)" }}>
-                {carrito.map(item => (
-                  <div key={item.producto.id} className="flex items-center justify-between py-2 px-2 bg-gray-50 rounded-lg">
-                    <div className="flex-1 min-w-0"><p className="font-medium text-gray-900 text-xs truncate">{item.producto.nombre}</p><p className="text-xs text-gray-500">${item.producto.precio.toFixed(2)} x {item.cantidad}</p></div>
-                    <div className="flex items-center gap-2 ml-2"><span className="font-semibold text-gray-800 text-xs">${(item.producto.precio * item.cantidad).toFixed(2)}</span><button onClick={() => eliminarDelCarrito(item.producto.id)} className="text-gray-400 hover:text-red-500 text-sm">×</button></div>
-                  </div>
-                ))}
+               {carrito.map(item => {
+               const precioOriginal = item.producto.precio * item.cantidad;
+               const descuentoAplicado = item.descuentoTipo === "porcentaje"
+              ? (precioOriginal * item.descuento) / 100
+               : item.descuento;
+              const precioFinal = precioOriginal - descuentoAplicado;
+
+               return (
+    <div key={item.producto.id} className="py-2 px-2 bg-gray-50 rounded-lg">
+      <div className="flex items-center justify-between">
+        <div className="flex-1 min-w-0">
+          <p className="font-medium text-gray-900 text-xs truncate">{item.producto.nombre}</p>
+          <p className="text-xs text-gray-500">
+            ${item.producto.precio.toFixed(2)} x {item.cantidad}
+            {item.descuento > 0 && (
+              <span className="text-yellow-600 ml-1">
+                (-${descuentoAplicado.toFixed(2)})
+              </span>
+            )}
+          </p>
+        </div>
+        <div className="flex items-center gap-2 ml-2">
+          <span className="font-semibold text-gray-800 text-xs">${precioFinal.toFixed(2)}</span>
+          <div className="relative">
+            <button
+              onClick={() => setMenuAbiertoId(menuAbiertoId === item.producto.id ? null : item.producto.id)}
+              className="text-gray-400 hover:text-gray-600 text-sm"
+            >
+              ⋮
+            </button>
+            {menuAbiertoId === item.producto.id && (
+  <>
+    {/* Fondo oscuro que cubre el resto del carrito */}
+    <div
+  className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm"
+  onClick={() => setMenuAbiertoId(null)}
+></div>
+    {/* Menú flotante centrado */}
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-xl shadow-2xl border border-gray-200 p-5 w-full max-w-xs">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-bold text-gray-900 truncate flex-1 mr-2">{item.producto.nombre}</h3>
+          <button
+            onClick={() => setMenuAbiertoId(null)}
+            className="text-gray-400 hover:text-gray-600 text-lg"
+          >
+            ✕
+          </button>
+        </div>
+        
+        <p className="text-xs text-gray-500 mb-3">
+          Precio original: ${item.producto.precio.toFixed(2)} x {item.cantidad} = ${(item.producto.precio * item.cantidad).toFixed(2)}
+        </p>
+
+        <label className="block text-xs font-semibold text-gray-900 mb-2">Descuento individual</label>
+        <div className="flex items-center gap-2 mb-3">
+          <select
+            value={item.descuentoTipo}
+            onChange={(e) => actualizarDescuentoItem(item.producto.id, item.descuento, e.target.value as "porcentaje" | "monto")}
+            className="text-sm border border-gray-300 rounded-lg px-2 py-2 bg-white text-gray-900 w-16"
+          >
+            <option value="monto">$</option>
+            <option value="porcentaje">%</option>
+          </select>
+          <input
+            type="number"
+            min="0"
+            value={item.descuento || ""}
+            onChange={(e) => actualizarDescuentoItem(item.producto.id, parseFloat(e.target.value) || 0, item.descuentoTipo)}
+            className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900"
+            placeholder="0"
+          />
+        </div>
+
+        {item.descuento > 0 && (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-3">
+            <div className="flex justify-between text-sm">
+              <span className="text-yellow-800">Descuento:</span>
+              <span className="text-yellow-800 font-medium">-${descuentoAplicado.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between text-sm mt-1">
+              <span className="text-gray-900 font-medium">Total producto:</span>
+              <span className="text-green-700 font-bold">${precioFinal.toFixed(2)}</span>
+            </div>
+          </div>
+        )}
+
+        <button
+          onClick={() => setMenuAbiertoId(null)}
+          className="w-full py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-bold shadow-sm transition"
+        >
+          Aplicar descuento
+        </button>
+      </div>
+    </div>
+  </>
+)}
+          </div>
+          <button onClick={() => eliminarDelCarrito(item.producto.id)} className="text-gray-400 hover:text-red-500 text-sm">×</button>
+        </div>
+      </div>
+    </div>
+  );
+})}
               </div>
 
               <div className="border-t border-gray-200 pt-2 mt-2">
