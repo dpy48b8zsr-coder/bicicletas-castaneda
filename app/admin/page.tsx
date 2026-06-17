@@ -262,7 +262,7 @@ function CajaModal({ onClose, sucursalId }: { onClose: () => void; sucursalId?: 
 
     // Registrar el corte con los totales acumulados desde el último corte
     const { error: corteError } = await supabase.from("cortes_caja").insert({
-      fecha_inicio: cajaData.montoInicial > 0 ? undefined : new Date().toISOString().slice(0, 10) + "T00:00:00", // solo informativo
+      fecha_inicio: new Date().toISOString().slice(0, 10) + "T00:00:00",
       fecha_fin: ahora,
       total_ventas: cajaData.total,
       efectivo: cajaData.efectivo,
