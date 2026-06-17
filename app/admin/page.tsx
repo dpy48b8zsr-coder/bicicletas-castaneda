@@ -804,6 +804,12 @@ function PosPage() {
         : descuentoManual;
       mensaje += `\n*Descuento (${descuentoManualTipo === "porcentaje" ? descuentoManual + "%" : "$" + descuentoManual.toFixed(2)}):* -$${montoDescManual.toFixed(2)}\n`;
     }
+        if (ticketData.descuentoManual && ticketData.descuentoManual > 0) {
+      const montoDescManual = ticketData.descuentoManualTipo === "porcentaje"
+        ? ((ticketData.items.reduce((acc, item) => acc + item.producto.precio * item.cantidad, 0) * ticketData.descuentoManual) / 100)
+        : ticketData.descuentoManual;
+      mensaje += `\n*Descuento (${ticketData.descuentoManualTipo === "porcentaje" ? ticketData.descuentoManual + "%" : "$" + ticketData.descuentoManual.toFixed(2)}):* -$${montoDescManual.toFixed(2)}\n`;
+    }
     if (ticketData.descuentoPuntos > 0) mensaje += `\n*Descuento por puntos:* -$${ticketData.descuentoPuntos.toFixed(2)}\n`;
     mensaje += `\n*Total: $${ticketData.total.toFixed(2)}*\nMétodo: ${ticketData.metodoPago}\n`;
     if (ticketData.montoRecibido !== undefined) {
@@ -882,12 +888,22 @@ function PosPage() {
             <p>Ticket #${ticketData.ventaId.slice(0, 8)}</p>
             <p>${new Date(ticketData.fecha).toLocaleString("es-MX")}</p>
             <hr>
-            ${lineasHTML}
+                        ${lineasHTML}
             ${
-              descuentoManual > 0
+              ticketData.descuentoManual && ticketData.descuentoManual > 0
                 ? `<div style="display: flex; justify-content: space-between; font-size: 12px; padding: 2px 0;">
-                    <span>Descuento (${descuentoManualTipo === "porcentaje" ? descuentoManual + "%" : "$" + descuentoManual.toFixed(2)})</span>
-                    <span>-$${montoDescManual.toFixed(2)}</span>
+                    <span>Descuento (${ticketData.descuentoManualTipo === "porcentaje" ? ticketData.descuentoManual + "%" : "$" + ticketData.descuentoManual.toFixed(2)})</span>
+                    <span>-$${ticketData.descuentoManualTipo === "porcentaje"
+                      ? ((ticketData.items.reduce((acc, item) => acc + item.producto.precio * item.cantidad, 0) * ticketData.descuentoManual) / 100).toFixed(2)
+                      : ticketData.descuentoManual.toFixed(2)}</span>
+                  </div>`
+                : ""
+            }
+            ${
+              ticketData.descuentoPuntos > 0
+                ? `<div style="display: flex; justify-content: space-between; font-size: 12px; padding: 2px 0;">
+                    <span>Descuento puntos</span>
+                    <span>-$${ticketData.descuentoPuntos.toFixed(2)}</span>
                   </div>`
                 : ""
             }
@@ -1347,6 +1363,14 @@ function PosPage() {
                 <div key={idx} className="flex justify-between text-sm py-1 text-gray-900"><span className="font-medium">{item.producto.nombre} x{item.cantidad}</span><span className="font-semibold">${(item.producto.precio * item.cantidad).toFixed(2)}</span></div>
               ))}
             </div>
+            {ticketData.descuentoManual && ticketData.descuentoManual > 0 && (
+  <div className="flex justify-between text-sm text-yellow-700 font-medium py-1">
+    <span>Descuento ({ticketData.descuentoManualTipo === "porcentaje" ? ticketData.descuentoManual + "%" : "$" + ticketData.descuentoManual.toFixed(2)})</span>
+    <span>-${ticketData.descuentoManualTipo === "porcentaje"
+      ? ((ticketData.items.reduce((acc, item) => acc + item.producto.precio * item.cantidad, 0) * ticketData.descuentoManual) / 100).toFixed(2)
+      : ticketData.descuentoManual.toFixed(2)}</span>
+  </div>
+)}
             {ticketData.descuentoPuntos > 0 && <div className="flex justify-between text-sm text-green-700 font-medium py-1"><span>Descuento por puntos</span><span>-${ticketData.descuentoPuntos.toFixed(2)}</span></div>}
             <div className="border-t border-dashed border-gray-400 pt-2 mt-2 space-y-2 text-sm">
               <div className="flex justify-between font-bold text-base text-gray-900"><span>Total</span><span>${ticketData.total.toFixed(2)}</span></div>

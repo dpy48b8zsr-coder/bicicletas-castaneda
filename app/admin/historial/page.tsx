@@ -637,6 +637,12 @@ export default function HistorialPage() {
     ticketReimpresion.detalles.forEach((item: any) => {
       mensaje += `- ${item.productos?.nombre || "Producto"} x${item.cantidad}: $${(item.precio_unitario * item.cantidad).toFixed(2)}\n`;
     });
+        if (ticketReimpresion.venta.descuentoManual && ticketReimpresion.venta.descuentoManual > 0) {
+      const montoDescManual = ticketReimpresion.venta.descuentoManualTipo === "porcentaje"
+        ? ((ticketReimpresion.detalles.reduce((acc, item) => acc + item.precio_unitario * item.cantidad, 0) * ticketReimpresion.venta.descuentoManual) / 100)
+        : ticketReimpresion.venta.descuentoManual;
+      mensaje += `\n*Descuento (${ticketReimpresion.venta.descuentoManualTipo === "porcentaje" ? ticketReimpresion.venta.descuentoManual + "%" : "$" + ticketReimpresion.venta.descuentoManual.toFixed(2)}):* -$${montoDescManual.toFixed(2)}\n`;
+    }
     if (ticketReimpresion.descuentoPuntos > 0) mensaje += `\n*Descuento por puntos:* -$${ticketReimpresion.descuentoPuntos.toFixed(2)}\n`;
     mensaje += `\n*Total: $${venta.total.toFixed(2)}*\nMétodo: ${venta.metodo_pago}\n`;
     if (venta.monto_recibido != null) { mensaje += `Recibido: $${venta.monto_recibido.toFixed(2)}\n`; if (venta.cambio != null) mensaje += `Cambio: $${venta.cambio.toFixed(2)}\n`; }
@@ -704,15 +710,25 @@ ${sucursal ? `<p style="text-align: center; font-size: 11px;">Sucursal: ${sucurs
           <p>Ticket #${venta.id.slice(0, 8)}</p>
           <p>${new Date(venta.created_at).toLocaleString("es-MX")}</p>
           <hr>
-          ${lineasHTML}
-          ${
-            ticketReimpresion.descuentoPuntos > 0
-              ? `<div style="display: flex; justify-content: space-between; font-size: 14px; padding: 2px 0;">
-                  <span>Descuento puntos</span>
-                  <span>-$${ticketReimpresion.descuentoPuntos.toFixed(2)}</span>
-                </div>`
-              : ""
-          }
+                      ${lineasHTML}
+            ${
+              ticketReimpresion.venta.descuentoManual && ticketReimpresion.venta.descuentoManual > 0
+                ? `<div style="display: flex; justify-content: space-between; font-size: 12px; padding: 2px 0;">
+                    <span>Descuento (${ticketReimpresion.venta.descuentoManualTipo === "porcentaje" ? ticketReimpresion.venta.descuentoManual + "%" : "$" + ticketReimpresion.venta.descuentoManual.toFixed(2)})</span>
+                    <span>-$${ticketReimpresion.venta.descuentoManualTipo === "porcentaje"
+                      ? ((ticketReimpresion.detalles.reduce((acc, item) => acc + item.precio_unitario * item.cantidad, 0) * ticketReimpresion.venta.descuentoManual) / 100).toFixed(2)
+                      : ticketReimpresion.venta.descuentoManual.toFixed(2)}</span>
+                  </div>`
+                : ""
+            }
+            ${
+              ticketReimpresion.descuentoPuntos > 0
+                ? `<div style="display: flex; justify-content: space-between; font-size: 12px; padding: 2px 0;">
+                    <span>Descuento por puntos</span>
+                    <span>-$${ticketReimpresion.descuentoPuntos.toFixed(2)}</span>
+                  </div>`
+                : ""
+            }
           <hr>
           <div style="display: flex; justify-content: space-between; font-size: 16px; font-weight: bold;">
             <span>Total</span>
@@ -953,6 +969,14 @@ ${sucursal ? `<p style="text-align: center; font-size: 11px;">Sucursal: ${sucurs
             <div className="border-t border-dashed border-gray-400 pt-3 mb-3">
               {ticketReimpresion.detalles.map((item: any, idx: number) => (<div key={idx} className="flex justify-between text-sm py-1 text-gray-900"><span className="font-medium">{item.productos?.nombre || "Producto"} x{item.cantidad}</span><span className="font-semibold">${(item.precio_unitario * item.cantidad).toFixed(2)}</span></div>))}
             </div>
+            {ticketReimpresion.venta.descuentoManual && ticketReimpresion.venta.descuentoManual > 0 && (
+  <div className="flex justify-between text-sm text-yellow-700 font-medium py-1">
+    <span>Descuento ({ticketReimpresion.venta.descuentoManualTipo === "porcentaje" ? ticketReimpresion.venta.descuentoManual + "%" : "$" + ticketReimpresion.venta.descuentoManual.toFixed(2)})</span>
+    <span>-${ticketReimpresion.venta.descuentoManualTipo === "porcentaje"
+      ? ((ticketReimpresion.detalles.reduce((acc, item) => acc + item.precio_unitario * item.cantidad, 0) * ticketReimpresion.venta.descuentoManual) / 100).toFixed(2)
+      : ticketReimpresion.venta.descuentoManual.toFixed(2)}</span>
+  </div>
+)}
             {ticketReimpresion.descuentoPuntos > 0 && <div className="flex justify-between text-sm text-green-700 font-medium py-1"><span>Descuento por puntos</span><span>-${ticketReimpresion.descuentoPuntos.toFixed(2)}</span></div>}
             <div className="border-t border-dashed border-gray-400 pt-2 mt-2 space-y-2 text-sm">
               <div className="flex justify-between font-bold text-base text-gray-900"><span>Total</span><span>${ticketReimpresion.venta.total.toFixed(2)}</span></div>
