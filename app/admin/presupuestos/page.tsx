@@ -165,12 +165,12 @@ export default function PresupuestosPage() {
     if (lineas.length === 0) { alert("Agrega al menos una línea."); return; }
     setGuardando(true);
 
-    const payload = {
-      cliente_id: clienteId,
-      total: totalPresupuesto,
-      notas: notas.trim() || null,
-      sucursal_id: sucursalId,
-    };
+   const payload: any = {
+  cliente_id: clienteId,
+  total: totalPresupuesto,
+  notas: notas.trim() || null,
+};
+if (sucursalId) payload.sucursal_id = sucursalId;
 
     let presupuestoId: string | null = editandoId;
 

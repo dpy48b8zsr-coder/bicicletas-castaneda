@@ -977,6 +977,14 @@ ${sucursal ? `<p style="text-align: center; font-size: 11px;">Sucursal: ${sucurs
       : ticketReimpresion.venta.descuentoManual.toFixed(2)}</span>
   </div>
 )}
+                                              {ticketReimpresion.venta.descuentoManual && ticketReimpresion.venta.descuentoManual > 0 && (
+                                                <div className="flex justify-between text-sm text-yellow-700 font-medium py-1">
+                                                  <span>Descuento ({ticketReimpresion.venta.descuentoManualTipo === "porcentaje" ? ticketReimpresion.venta.descuentoManual + "%" : "$" + ticketReimpresion.venta.descuentoManual.toFixed(2)})</span>
+                                                  <span>-${ticketReimpresion.venta.descuentoManualTipo === "porcentaje"
+                                                    ? ((ticketReimpresion.detalles.reduce((acc: number, item: any) => acc + item.precio_unitario * item.cantidad, 0) * ticketReimpresion.venta.descuentoManual) / 100).toFixed(2)
+                                                    : ticketReimpresion.venta.descuentoManual.toFixed(2)}</span>
+                                                </div>
+                                              )}
             {ticketReimpresion.descuentoPuntos > 0 && <div className="flex justify-between text-sm text-green-700 font-medium py-1"><span>Descuento por puntos</span><span>-${ticketReimpresion.descuentoPuntos.toFixed(2)}</span></div>}
             <div className="border-t border-dashed border-gray-400 pt-2 mt-2 space-y-2 text-sm">
               <div className="flex justify-between font-bold text-base text-gray-900"><span>Total</span><span>${ticketReimpresion.venta.total.toFixed(2)}</span></div>
