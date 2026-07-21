@@ -205,6 +205,127 @@ export default function PresupuestosPage() {
     router.push(`/admin?presupuesto=${presupuestoId}`);
   };
 
+  const descargarPDF = async (presupuesto: Presupuesto) => {
+    const { data: lineasData } = await supabase
+      .from("detalle_presupuesto")
+      .select("*")
+      .eq("presupuesto_id", presupuesto.id);
+
+    const lineas = lineasData || [];
+    const fecha = new Date(presupuesto.created_at).toLocaleDateString("es-MX", {
+      year: "numeric", month: "long", day: "numeric",
+    });
+
+    const nombreCliente = presupuesto.clientes?.nombre || "No asignado";
+
+    const html = `
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <title>Presupuesto #${presupuesto.id.slice(0, 8)}</title>
+          <style>
+            body { font-family: Arial, sans-serif; margin: 20px; }
+            @media print { body { margin: 0; } }
+          </style>
+        </head>
+        <body>
+          <div style="border: 1px solid #000; padding: 15px;">
+            <h2 style="text-align: center;">Bicicletas Castañeda</h2>
+            <p style="text-align: center;">Presupuesto</p>
+            <p><strong>Nº:</strong> ${presupuesto.id.slice(0, 8)}</p>
+            <p><strong>Fecha:</strong> ${fecha}</p>
+            <p><strong>Cliente:</strong> ${nombreCliente}</p>
+            <p><strong>Estado:</strong> ${presupuesto.estado}</p>
+            ${presupuesto.notas ? `<p><strong>Notas:</strong> ${presupuesto.notas}</p>` : ""}
+            
+            <h3 style="margin-top: 15px;">Conceptos</h3>
+            <table style="width: 100%; border-collapse: collapse; margin-bottom: 15px;">
+              <thead>
+                <tr style="background: #f0f0f0;">
+                  <th style="border: 1px solid #000; padding: 5px; text-align: left;">Descripción</th>
+                  <th style="border: 1px solid #000; padding: 5px; text-align: center;">Cant.</th>
+                  <th style="border: 1px solid #000; padding: 5px; text-align: right;">P.Unit.</th>
+                  <th style="border: 1px solid #000; padding: 5px; text-align: right;">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${lineas.map((l: any) => `
+                  <tr>
+                    <td style="border: 1px solid #000; padding: 5px;">${l.descripcion || "—"}</td>
+                    <td style="border: 1px solid #000; padding: 5px; text-align: center;">${l.cantidad}</td>
+                    <td style="border: 1px solid #000; padding: 5px; text-align: right;">$${l.precio_unitario.toFixed(2)}</td>
+                    <td style="border: 1px solid #000; padding: 5px; text-align: right;">$${(l.cantidad * l.precio_unitario).toFixed(2)}</td>
+                  </tr>
+                `).join("")}
+              </tbody>
+            </table>
+            <p style="text-align: right; font-weight: bold; font-size: 16px;">Total: $${presupuesto.total.toFixed(2)}</p>
+          </div>
+        </body>
+      </html>
+    `;
+
+    const blob = new Blob([html], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    const ventana = window.open(url, "_blank");
+    if (ventana) {
+      ventana.onload = () => {
+        ventana.print();
+      };
+    } else {
+      alert("Permite las ventanas emergentes para ver el presupuesto.");
+    }
+  };
+
+  const enviarWhatsAppPresupuesto = async (presupuesto: Presupuesto) => {
+    const { data: lineasData } = await supabase
+      .from("detalle_presupuesto")
+      .select("*")
+      .eq("presupuesto_id", presupuesto.id);
+
+    const lineas = lineasData || [];
+    const nombreCliente = presupuesto.clientes?.nombre || "No asignado";
+    
+    // Obtener teléfono del cliente
+    const { data: clienteData } = await supabase
+      .from("clientes")
+      .select("telefono")
+      .eq("id", presupuesto.cliente_id)
+      .single();
+    
+    const telefonoCliente = clienteData?.telefono;
+    
+    if (!telefonoCliente) {
+      alert("El cliente no tiene teléfono registrado.");
+      return;
+    }
+
+    let numero = telefonoCliente.replace(/[\s\-\(\)]/g, "");
+    if (numero.startsWith("52") && numero.length > 10) {
+      // OK
+    } else if (numero.length === 10) {
+      numero = "52" + numero;
+    }
+
+    let mensaje = `📝 *Presupuesto Bicicletas Castañeda*\n`;
+    mensaje += `Nº: ${presupuesto.id.slice(0, 8)}\n`;
+    mensaje += `Fecha: ${new Date(presupuesto.created_at).toLocaleDateString("es-MX")}\n`;
+    mensaje += `Cliente: ${nombreCliente}\n`;
+    mensaje += `Estado: ${presupuesto.estado}\n\n`;
+    mensaje += `*Conceptos:*\n`;
+    
+    lineas.forEach((l: any) => {
+      mensaje += `- ${l.descripcion || "Sin descripción"} x${l.cantidad}: $${(l.cantidad * l.precio_unitario).toFixed(2)}\n`;
+    });
+    
+    mensaje += `\n*Total: $${presupuesto.total.toFixed(2)}*\n`;
+    if (presupuesto.notas) mensaje += `\nNotas: ${presupuesto.notas}\n`;
+    mensaje += `\n¡Gracias por confiar en Bicicletas Castañeda! 🚲`;
+
+    const url = `https://wa.me/${numero}?text=${encodeURIComponent(mensaje)}`;
+    window.open(url, "_blank");
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -252,6 +373,18 @@ export default function PresupuestosPage() {
                           className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 text-xs font-medium transition-colors"
                         >
                           ✏️ Editar
+                        </button>
+                        <button
+                          onClick={() => descargarPDF(p)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-gray-50 text-gray-700 hover:bg-gray-100 border border-gray-200 text-xs font-medium transition-colors"
+                        >
+                          📄 PDF
+                        </button>
+                        <button
+                          onClick={() => enviarWhatsAppPresupuesto(p)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 text-xs font-medium transition-colors"
+                        >
+                          💬 WhatsApp
                         </button>
                         {p.estado === "pendiente" && (
                           <>
@@ -315,6 +448,18 @@ export default function PresupuestosPage() {
                     className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 text-xs font-medium transition-colors"
                   >
                     ✏️ Editar
+                  </button>
+                  <button
+                    onClick={() => descargarPDF(p)}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-gray-50 text-gray-700 hover:bg-gray-100 border border-gray-200 text-xs font-medium transition-colors"
+                  >
+                    📄 PDF
+                  </button>
+                  <button
+                    onClick={() => enviarWhatsAppPresupuesto(p)}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 text-xs font-medium transition-colors"
+                  >
+                    💬 WhatsApp
                   </button>
                   {p.estado === "pendiente" && (
                     <>
