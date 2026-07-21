@@ -97,20 +97,15 @@ function OrdenTallerPage() {
     ] = await Promise.all([
       supabase.from("ordenes_taller")
         .select("*, clientes(nombre)")
-       .eq("activo", true)
-.eq("sucursal_id", sucursalId)
         .order("created_at", { ascending: false }),
       supabase.from("clientes").select("id, nombre").order("nombre"),
       supabase.from("citas_taller")
         .select("id, fecha_hora, clientes(nombre)")
-        .eq("activo", true)
-.eq("sucursal_id", sucursalId)
         .order("fecha_hora", { ascending: false })
         .limit(20),
       supabase.from("productos")
         .select("id, nombre, precio, stock")
         .eq("activo", true)
-.eq("sucursal_id", sucursalId)
         .order("nombre"),
     ]);
     if (ordenesData) setOrdenes(ordenesData);
@@ -159,14 +154,13 @@ function OrdenTallerPage() {
         .from("productos")
         .select("id, nombre, precio, stock")
         .eq("activo", true)
-.eq("sucursal_id", sucursalId)
         .or(`nombre.ilike.${term},sku.ilike.${term},codigo_barras.ilike.${term}`)
         .limit(5);
       if (data) setResultadosBusqueda(data);
     };
     const timer = setTimeout(buscar, 200);
     return () => clearTimeout(timer);
-  }, [busquedaProducto, sucursalId]);
+  }, [busquedaProducto]);
 
   const abrirNueva = () => {
     setEditandoId(null);
@@ -267,14 +261,14 @@ function OrdenTallerPage() {
     if (!clienteId) { alert("Selecciona un cliente."); return; }
     if (lineas.length === 0) { alert("Agrega al menos un concepto."); return; }
 
-    const payload = {
+    const payload: any = {
       cliente_id: clienteId,
       cita_id: citaId || null,
       estado: estado,
       total: totalOrden,
       notas: notas.trim() || null,
-      sucursal_id: sucursalId,
     };
+    if (sucursalId) payload.sucursal_id = sucursalId;
 
     setGuardando(true);
     let ordenId: string | null = editandoId;
@@ -298,7 +292,7 @@ function OrdenTallerPage() {
     }));
 
     const { error: lineasError } = await supabase.from("detalle_orden_taller").insert(lineasParaInsertar);
-    if (lineasError) { alert("Error al guardar las líneas."); setGuardando(false); return; }
+    if (lineasError) { alert("Error al guardar las líneas: " + lineasError.message); setGuardando(false); return; }
 
     if (citaId && !editandoId) {
       const estadoCita = mapearEstadoOrdenACita(estado);

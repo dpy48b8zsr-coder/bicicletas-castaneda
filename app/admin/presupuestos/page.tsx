@@ -62,14 +62,11 @@ export default function PresupuestosPage() {
     const [{ data: pres }, { data: cli }, { data: prods }] = await Promise.all([
       supabase.from("presupuestos")
         .select("*, clientes(nombre)")
-        .eq("activo", true)
-        .eq("sucursal_id", sucursalId)
         .order("created_at", { ascending: false }),
       supabase.from("clientes").select("id, nombre").order("nombre"),
       supabase.from("productos")
         .select("id, nombre, precio, stock")
         .eq("activo", true)
-        .eq("sucursal_id", sucursalId)
         .order("nombre"),
     ]);
     if (pres) setPresupuestos(pres);
@@ -93,14 +90,13 @@ export default function PresupuestosPage() {
         .from("productos")
         .select("id, nombre, precio, stock")
         .eq("activo", true)
-        .eq("sucursal_id", sucursalId)
         .or(`nombre.ilike.${term},sku.ilike.${term},codigo_barras.ilike.${term}`)
         .limit(5);
       if (data) setResultadosBusqueda(data);
     };
     const timer = setTimeout(buscar, 200);
     return () => clearTimeout(timer);
-  }, [busquedaProducto, sucursalId]);
+  }, [busquedaProducto]);
 
   const abrirNuevo = () => {
     setEditandoId(null);
@@ -165,12 +161,12 @@ export default function PresupuestosPage() {
     if (lineas.length === 0) { alert("Agrega al menos una línea."); return; }
     setGuardando(true);
 
-   const payload: any = {
-  cliente_id: clienteId,
-  total: totalPresupuesto,
-  notas: notas.trim() || null,
-};
-if (sucursalId) payload.sucursal_id = sucursalId;
+    const payload: any = {
+      cliente_id: clienteId,
+      total: totalPresupuesto,
+      notas: notas.trim() || null,
+    };
+    if (sucursalId) payload.sucursal_id = sucursalId;
 
     let presupuestoId: string | null = editandoId;
 
@@ -193,7 +189,7 @@ if (sucursalId) payload.sucursal_id = sucursalId;
     }));
 
     const { error: lineasError } = await supabase.from("detalle_presupuesto").insert(lineasParaInsertar);
-    if (lineasError) { alert("Error al guardar las líneas."); setGuardando(false); return; }
+    if (lineasError) { alert("Error al guardar las líneas: " + lineasError.message); setGuardando(false); return; }
 
     setGuardando(false);
     setMostrarForm(false);
