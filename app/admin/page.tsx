@@ -1,7 +1,7 @@
 // @ts-nocheck
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import React, { Suspense } from "react";
 import { supabase } from "@/lib/supabase";
@@ -399,6 +399,10 @@ function PosPage() {
   const ordenTallerParam = searchParams.get("orden_taller");
   const clienteIdParam = searchParams.get("cliente_id");
 
+  // Refs para evitar duplicados en StrictMode
+  const procesadosPresupuestos = useRef<Set<string>>(new Set());
+  const procesadosOrdenes = useRef<Set<string>>(new Set());
+
   // Contextos
   const {
     tickets,
@@ -522,15 +526,18 @@ function PosPage() {
     });
   }, [sucursalId]);
 
-  // Efecto para convertir presupuesto en venta
+  // Efecto para convertir presupuesto en venta (sin duplicados)
   useEffect(() => {
-    if (!presupuestoParam) return;
+    if (!presupuestoParam || procesadosPresupuestos.current.has(presupuestoParam)) return;
+    procesadosPresupuestos.current.add(presupuestoParam);
+
     const cargarPresupuestoEnCarrito = async () => {
       const { data: lineas, error } = await supabase
         .from("detalle_presupuesto")
         .select("producto_id, descripcion, cantidad, precio_unitario")
         .eq("presupuesto_id", presupuestoParam);
       if (error || !lineas || lineas.length === 0) return;
+
       for (const linea of lineas) {
         if (linea.producto_id) {
           const { data: producto } = await supabase.from("productos").select("*").eq("id", linea.producto_id).single();
@@ -553,22 +560,28 @@ function PosPage() {
           });
         }
       }
+
+      // Limpiar URL después de cargar
       const url = new URL(window.location.href);
       url.searchParams.delete("presupuesto");
       window.history.replaceState({}, "", url.toString());
     };
+
     cargarPresupuestoEnCarrito();
   }, [presupuestoParam]);
 
-  // Efecto para convertir orden de taller en venta
+  // Efecto para convertir orden de taller en venta (sin duplicados)
   useEffect(() => {
-    if (!ordenTallerParam) return;
+    if (!ordenTallerParam || procesadosOrdenes.current.has(ordenTallerParam)) return;
+    procesadosOrdenes.current.add(ordenTallerParam);
+
     const cargarOrdenEnCarrito = async () => {
       const { data: lineas, error } = await supabase
         .from("detalle_orden_taller")
         .select("producto_id, descripcion, cantidad, precio_unitario")
         .eq("orden_id", ordenTallerParam);
       if (error || !lineas || lineas.length === 0) return;
+
       for (const linea of lineas) {
         if (linea.producto_id) {
           const { data: producto } = await supabase.from("productos").select("*").eq("id", linea.producto_id).single();
@@ -591,6 +604,7 @@ function PosPage() {
           });
         }
       }
+
       if (clienteIdParam) {
         setClienteSeleccionado(clienteIdParam);
         const { data: clienteData } = await supabase
@@ -602,11 +616,14 @@ function PosPage() {
           setClientePuntos(clienteData.puntos || 0);
         }
       }
+
+      // Limpiar URL después de cargar
       const url = new URL(window.location.href);
       url.searchParams.delete("orden_taller");
       url.searchParams.delete("cliente_id");
       window.history.replaceState({}, "", url.toString());
     };
+
     cargarOrdenEnCarrito();
   }, [ordenTallerParam, clienteIdParam]);
 
@@ -743,7 +760,16 @@ function PosPage() {
     };
     let montoRec = undefined, cambioVal = undefined;
     if (metodoSeleccionado === "efectivo") { montoRec = montoRecibido; cambioVal = montoRecibido - total; ventaPayload.monto_recibido = montoRec; ventaPayload.cambio = cambioVal; }
-    if (clienteSeleccionado) { ventaPayload.cliente_id = clienteSeleccionado; ventaPayload.puntos_canjeados = puntosACanjear; ventaPayload.puntos_ganados = Math.floor(total / 10); }
+        // Determinar cliente para la venta
+    let clienteVenta = clienteSeleccionado;
+    if (metodoSeleccionado === "mixto" && pagosMixto.credito > 0) {
+      clienteVenta = pagosMixto.clienteCredito; // El cliente del crédito es el principal
+    }
+    if (clienteVenta) {
+      ventaPayload.cliente_id = clienteVenta;
+      ventaPayload.puntos_canjeados = puntosACanjear;
+      ventaPayload.puntos_ganados = Math.floor(total / 10);
+    }
     if (metodoSeleccionado === "mixto") {
       const parciales: PagoParcial[] = [];
       if (pagosMixto.efectivo > 0) parciales.push({ metodo: "efectivo", monto: pagosMixto.efectivo });
@@ -756,10 +782,15 @@ function PosPage() {
     if (ventaError) { setMensaje({ tipo: "error", texto: "Error al registrar venta" }); setCobrando(false); return; }
     const ventaId = ventaData.id, fechaVenta = ventaData.created_at;
     const itemsReales = carrito.filter(item => !item.producto.id.startsWith("generic_") && !item.producto.id.startsWith("orden_") && !item.producto.id.startsWith("pedido_"));
+    const itemsGenericos = carrito.filter(item => item.producto.id.startsWith("generic_") || item.producto.id.startsWith("orden_") || item.producto.id.startsWith("pedido_"));
+    
     const detalles = itemsReales.map(item => ({ venta_id: ventaId, producto_id: item.producto.id, cantidad: item.cantidad, precio_unitario: item.producto.precio }));
-    if (detalles.length > 0) {
-      const { error: detError } = await supabase.from("detalle_venta").insert(detalles);
-      if (detError) { await supabase.from("ventas").delete().eq("id", ventaId); setMensaje({ tipo: "error", texto: "Error en detalles" }); setCobrando(false); return; }
+    const detallesGenericos = itemsGenericos.map(item => ({ venta_id: ventaId, producto_id: null, descripcion: item.producto.nombre, cantidad: item.cantidad, precio_unitario: item.producto.precio }));
+
+    const todosDetalles = [...detalles, ...detallesGenericos];
+    if (todosDetalles.length > 0) {
+      const { error: detError } = await supabase.from("detalle_venta").insert(todosDetalles);
+      if (detError) { await supabase.from("ventas").delete().eq("id", ventaId); setMensaje({ tipo: "error", texto: "Error en detalles: " + detError.message }); setCobrando(false); return; }
     }
     const updates = itemsReales.map(item => supabase.from("productos").update({ stock: item.producto.stock - item.cantidad }).eq("id", item.producto.id));
     await Promise.all(updates);

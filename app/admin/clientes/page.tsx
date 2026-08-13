@@ -18,6 +18,7 @@ interface VentaCredito {
   id: string;
   total: number;
   created_at: string;
+  montoCredito: number;
 }
 
 interface Abono {
@@ -33,6 +34,7 @@ export default function ClientesPage() {
   const sucursalId = sucursalActiva?.id;
 
   const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [saldosPendientes, setSaldosPendientes] = useState<Record<string, number>>({});
   const [cargando, setCargando] = useState(false);
   const [busqueda, setBusqueda] = useState("");
 
@@ -63,12 +65,54 @@ export default function ClientesPage() {
 
   const cargarClientes = async () => {
     setCargando(true);
-    const { data, error } = await supabase
-      .from("clientes")
-      .select("*")
-      .order("nombre");
-    if (!error && data) setClientes(data);
-    setCargando(false);
+    try {
+      const [resClientes, resVentas, resAbonos] = await Promise.all([
+        supabase.from("clientes").select("*").order("nombre"),
+        supabase.from("ventas")
+          .select("id, total, metodo_pago, detalle_pago, cliente_id, estado")
+          .neq("estado", "devuelta"),
+        supabase.from("abonos_credito").select("cliente_id, monto"),
+      ]);
+
+      const clientesData = resClientes.data || [];
+      setClientes(clientesData);
+
+      // Calcular saldo pendiente por cliente
+      const mapaSaldos: Record<string, number> = {};
+      const ventasData = resVentas.data || [];
+      const abonosData = resAbonos.data || [];
+
+      // Inicializar saldo en 0 para todos los clientes
+      clientesData.forEach(c => { mapaSaldos[c.id] = 0; });
+
+      // Sumar créditos de ventas
+      ventasData.forEach((v: any) => {
+        if (!v.cliente_id) return;
+        let montoCredito = 0;
+        if (v.metodo_pago === "credito") {
+          montoCredito = v.total;
+        } else if (v.metodo_pago === "mixto" && v.detalle_pago) {
+          const pagoCredito = v.detalle_pago.find((p: any) => p.metodo === "credito");
+          if (pagoCredito) montoCredito = pagoCredito.monto;
+        }
+        if (montoCredito > 0) {
+          mapaSaldos[v.cliente_id] = (mapaSaldos[v.cliente_id] || 0) + montoCredito;
+        }
+      });
+
+      // Restar abonos
+      abonosData.forEach((a: any) => {
+        if (a.cliente_id) {
+          mapaSaldos[a.cliente_id] = (mapaSaldos[a.cliente_id] || 0) - a.monto;
+        }
+      });
+
+      setSaldosPendientes(mapaSaldos);
+    } catch (err) {
+      console.error("Error cargando clientes:", err);
+    } finally {
+      setCargando(false);
+    }
   };
 
   useEffect(() => {
@@ -152,19 +196,45 @@ export default function ClientesPage() {
     cargarClientes();
   };
 
-  // Abrir estado de cuenta (muestra todas las ventas a crédito y abonos, sin importar sucursal)
+  // Abrir estado de cuenta (incluye ventas a crédito y mixtas con crédito)
   const abrirEstadoCuenta = async (cliente: Cliente) => {
     setClienteSeleccionado(cliente);
     setMostrarEstadoCuenta(true);
 
-    // Cargar ventas a crédito del cliente
+    // Cargar todas las ventas del cliente
     const { data: ventasData } = await supabase
       .from("ventas")
-      .select("id, total, created_at")
+      .select("id, total, metodo_pago, detalle_pago, created_at, estado")
       .eq("cliente_id", cliente.id)
-      .eq("metodo_pago", "credito")
+      .neq("estado", "devuelta")
       .order("created_at", { ascending: false });
-    setVentasCredito(ventasData || []);
+
+    // Filtrar y calcular la parte de crédito de cada venta
+    const ventasCreditoFiltradas: VentaCredito[] = [];
+    if (ventasData) {
+      ventasData.forEach((v: any) => {
+        if (v.metodo_pago === "credito") {
+          ventasCreditoFiltradas.push({
+            id: v.id,
+            total: v.total,
+            created_at: v.created_at,
+            montoCredito: v.total,
+          });
+        } else if (v.metodo_pago === "mixto" && v.detalle_pago) {
+          const pagoCredito = v.detalle_pago.find((p: any) => p.metodo === "credito");
+          if (pagoCredito && pagoCredito.monto > 0) {
+            ventasCreditoFiltradas.push({
+              id: v.id,
+              total: v.total,
+              created_at: v.created_at,
+              montoCredito: pagoCredito.monto,
+            });
+          }
+        }
+      });
+    }
+
+    setVentasCredito(ventasCreditoFiltradas);
 
     // Cargar abonos del cliente
     const { data: abonosData } = await supabase
@@ -203,10 +273,11 @@ export default function ClientesPage() {
     setMotivoAbono("Pago de crédito");
     setMetodoAbono("efectivo");
     abrirEstadoCuenta(clienteSeleccionado);
+    cargarClientes(); // Actualizar saldo visible
   };
 
-  // Calcular saldo pendiente
-  const totalCredito = ventasCredito.reduce((acc, v) => acc + v.total, 0);
+  // Calcular saldo pendiente (suma de montos de crédito)
+  const totalCredito = ventasCredito.reduce((acc, v) => acc + v.montoCredito, 0);
   const totalAbonos = abonos.reduce((acc, a) => acc + a.monto, 0);
   const saldoPendiente = totalCredito - totalAbonos;
 
@@ -249,42 +320,55 @@ export default function ClientesPage() {
                   <th className="px-4 py-3 text-left font-semibold text-gray-900">Teléfono</th>
                   <th className="px-4 py-3 text-left font-semibold text-gray-900">Email</th>
                   <th className="px-4 py-3 text-left font-semibold text-gray-900">Puntos</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-900">Saldo pendiente</th>
                   <th className="px-4 py-3 text-left font-semibold text-gray-900">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {clientesFiltrados.map((cliente) => (
-                  <tr key={cliente.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 text-gray-900 font-medium">{cliente.nombre}</td>
-                    <td className="px-4 py-3 text-gray-700">{cliente.telefono || "—"}</td>
-                    <td className="px-4 py-3 text-gray-700">{cliente.email || "—"}</td>
-                    <td className="px-4 py-3">
-                      <span className="font-bold text-green-700">{cliente.puntos}</span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => abrirEstadoCuenta(cliente)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 text-xs font-medium transition-colors"
-                        >
-                          💰 Estado de cuenta
-                        </button>
-                        <button
-                          onClick={() => abrirEditar(cliente)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 text-xs font-medium transition-colors"
-                        >
-                          ✏️ Editar
-                        </button>
-                        <button
-                          onClick={() => setEliminandoId(cliente.id)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 text-xs font-medium transition-colors"
-                        >
-                          🗑️ Eliminar
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                {clientesFiltrados.map((cliente) => {
+                  const saldo = saldosPendientes[cliente.id] || 0;
+                  return (
+                    <tr key={cliente.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3 text-gray-900 font-medium">{cliente.nombre}</td>
+                      <td className="px-4 py-3 text-gray-700">{cliente.telefono || "—"}</td>
+                      <td className="px-4 py-3 text-gray-700">{cliente.email || "—"}</td>
+                      <td className="px-4 py-3">
+                        <span className="font-bold text-green-700">{cliente.puntos}</span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-block px-2 py-1 rounded-full text-xs font-semibold ${
+                          saldo > 0
+                            ? "bg-red-100 text-red-800"
+                            : "bg-gray-100 text-gray-600"
+                        }`}>
+                          {saldo > 0 ? `$${saldo.toFixed(2)}` : "Al día"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => abrirEstadoCuenta(cliente)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 text-xs font-medium transition-colors"
+                          >
+                            💰 Estado de cuenta
+                          </button>
+                          <button
+                            onClick={() => abrirEditar(cliente)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 text-xs font-medium transition-colors"
+                          >
+                            ✏️ Editar
+                          </button>
+                          <button
+                            onClick={() => setEliminandoId(cliente.id)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 text-xs font-medium transition-colors"
+                          >
+                            🗑️ Eliminar
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -298,25 +382,35 @@ export default function ClientesPage() {
         ) : clientesFiltrados.length === 0 ? (
           <p className="text-center text-gray-800 py-12">No se encontraron clientes.</p>
         ) : (
-          clientesFiltrados.map((cliente) => (
-            <div key={cliente.id} className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-              <h3 className="font-semibold text-gray-900">{cliente.nombre}</h3>
-              <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-600">
-                <span>📞 {cliente.telefono || "—"}</span>
-                <span>✉️ {cliente.email || "—"}</span>
-                <span className="font-bold text-green-700">{cliente.puntos} pts</span>
+          clientesFiltrados.map((cliente) => {
+            const saldo = saldosPendientes[cliente.id] || 0;
+            return (
+              <div key={cliente.id} className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+                <h3 className="font-semibold text-gray-900">{cliente.nombre}</h3>
+                <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-600">
+                  <span>📞 {cliente.telefono || "—"}</span>
+                  <span>✉️ {cliente.email || "—"}</span>
+                  <span className="font-bold text-green-700">{cliente.puntos} pts</span>
+                </div>
+                <div className="mt-2">
+                  <span className={`inline-block px-2 py-1 rounded-full text-xs font-semibold ${
+                    saldo > 0 ? "bg-red-100 text-red-800" : "bg-gray-100 text-gray-600"
+                  }`}>
+                    {saldo > 0 ? `Debe: $${saldo.toFixed(2)}` : "Al día"}
+                  </span>
+                </div>
+                <div className="flex gap-2 mt-3">
+                  <button onClick={() => abrirEstadoCuenta(cliente)} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 text-xs font-medium transition-colors">💰 Estado de cuenta</button>
+                  <button onClick={() => abrirEditar(cliente)} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 text-xs font-medium transition-colors">✏️ Editar</button>
+                  <button onClick={() => setEliminandoId(cliente.id)} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 text-xs font-medium transition-colors">🗑️ Eliminar</button>
+                </div>
               </div>
-              <div className="flex gap-2 mt-2">
-                <button onClick={() => abrirEstadoCuenta(cliente)} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 text-xs font-medium transition-colors">💰 Estado de cuenta</button>
-                <button onClick={() => abrirEditar(cliente)} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 text-xs font-medium transition-colors">✏️ Editar</button>
-                <button onClick={() => setEliminandoId(cliente.id)} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 text-xs font-medium transition-colors">🗑️ Eliminar</button>
-              </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
 
-      {/* Modal formulario */}
+      {/* Modal formulario (sin cambios) */}
       {mostrarFormulario && (
         <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md border border-gray-200 max-h-[90vh] overflow-y-auto">
@@ -415,7 +509,7 @@ export default function ClientesPage() {
         </div>
       )}
 
-      {/* Modal Estado de Cuenta */}
+      {/* Modal Estado de Cuenta (desglosado) */}
       {mostrarEstadoCuenta && clienteSeleccionado && (
         <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-2xl border border-gray-200 max-h-[90vh] overflow-y-auto">
@@ -499,7 +593,7 @@ export default function ClientesPage() {
                   <tr>
                     <th className="px-4 py-2 text-left font-medium text-gray-700">ID</th>
                     <th className="px-4 py-2 text-left font-medium text-gray-700">Fecha</th>
-                    <th className="px-4 py-2 text-right font-medium text-gray-700">Total</th>
+                    <th className="px-4 py-2 text-right font-medium text-gray-700">Crédito</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -512,7 +606,7 @@ export default function ClientesPage() {
                       <tr key={venta.id} className="hover:bg-gray-50">
                         <td className="px-4 py-2 text-gray-600 font-mono text-xs">{venta.id.slice(0, 8)}...</td>
                         <td className="px-4 py-2 text-gray-700">{new Date(venta.created_at).toLocaleString("es-MX")}</td>
-                        <td className="px-4 py-2 text-right font-semibold text-gray-900">${venta.total.toFixed(2)}</td>
+                        <td className="px-4 py-2 text-right font-semibold text-gray-900">${venta.montoCredito.toFixed(2)}</td>
                       </tr>
                     ))
                   )}

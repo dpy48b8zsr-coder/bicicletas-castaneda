@@ -16,11 +16,8 @@ import {
 } from "chart.js";
 import { Bar, Doughnut } from "react-chartjs-2";
 
-
-
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, ArcElement);
 
-// Función para rango local (sin cambios)
 function localDateRange(dateStr: string) {
   if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
     const hoy = new Date();
@@ -46,6 +43,7 @@ interface Venta {
   puntos_ganados?: number;
   puntos_canjeados?: number;
   estado?: string;
+  sucursal_id?: string;
 }
 
 interface MetricaConMargen {
@@ -63,7 +61,7 @@ interface Cliente {
   puntos: number;
 }
 
-// ---------- Modal de devolución (sin cambios) ----------
+// ---------- Modal de devolución ----------
 function DevolucionModal({
   venta,
   onClose,
@@ -74,13 +72,14 @@ function DevolucionModal({
   const [detalles, setDetalles] = useState<any[]>([]);
   const [cantidades, setCantidades] = useState<Record<string, number>>({});
   const [motivo, setMotivo] = useState("");
-  const [metodoReembolso, setMetodoReembolso] = useState("efectivo");
+  const [metodoReembolso, setMetodoReembolso] = useState("puntos");
   const [clienteId, setClienteId] = useState("");
   const [puntosAcreditar, setPuntosAcreditar] = useState<number>(0);
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [procesando, setProcesando] = useState(false);
   const [mensaje, setMensaje] = useState<string | null>(null);
   const [cargando, setCargando] = useState(true);
+  const [devolucionCompleta, setDevolucionCompleta] = useState(false);
 
   const [mostrarNuevoCliente, setMostrarNuevoCliente] = useState(false);
   const [nuevoNombre, setNuevoNombre] = useState("");
@@ -109,42 +108,65 @@ function DevolucionModal({
     const cargarDetalles = async () => {
       const { data, error } = await supabase
         .from("detalle_venta")
-        .select("cantidad, precio_unitario, producto_id, productos(nombre, stock)")
+        .select("id, cantidad, precio_unitario, producto_id, productos(nombre, stock), descripcion")
         .eq("venta_id", venta.id);
       if (!error && data) {
         setDetalles(data);
         const initCant: Record<string, number> = {};
         data.forEach((d: any) => {
-          initCant[d.producto_id] = 0;
+          initCant[d.id] = 0;
         });
         setCantidades(initCant);
+        if (data.length === 0) {
+          setDevolucionCompleta(true);
+        }
+      } else {
+        setDetalles([]);
+        setDevolucionCompleta(true);
       }
       setCargando(false);
     };
     cargarDetalles();
   }, [venta.id]);
 
-  const handleCantidadChange = (productoId: string, nuevaCantidad: number) => {
-    const detalle = detalles.find(d => d.producto_id === productoId);
+  const handleCantidadChange = (detalleId: string, nuevaCantidad: number) => {
+    const detalle = detalles.find(d => d.id === detalleId);
     if (!detalle) return;
     const max = detalle.cantidad;
     setCantidades(prev => ({
       ...prev,
-      [productoId]: Math.min(Math.max(0, nuevaCantidad), max),
+      [detalleId]: Math.min(Math.max(0, nuevaCantidad), max),
     }));
   };
 
+  const devolverTodo = () => {
+    const cantidadesMax: Record<string, number> = {};
+    detalles.forEach((d: any) => {
+      cantidadesMax[d.id] = d.cantidad;
+    });
+    setCantidades(cantidadesMax);
+  };
+
+  const limpiarSeleccion = () => {
+    const cantidadesCero: Record<string, number> = {};
+    detalles.forEach((d: any) => {
+      cantidadesCero[d.id] = 0;
+    });
+    setCantidades(cantidadesCero);
+  };
+
   const totalDevuelto = detalles.reduce((sum, d) => {
-    const cant = cantidades[d.producto_id] || 0;
+    const cant = cantidades[d.id] || 0;
     return sum + cant * d.precio_unitario;
   }, 0);
 
   const itemsDevueltos = detalles
-    .filter(d => cantidades[d.producto_id] > 0)
+    .filter(d => cantidades[d.id] > 0)
     .map(d => ({
+      detalle_id: d.id,
       producto_id: d.producto_id,
-      nombre: d.productos?.nombre || "Producto",
-      cantidad_devuelta: cantidades[d.producto_id],
+      nombre: d.productos?.nombre || d.descripcion || "Producto",
+      cantidad_devuelta: cantidades[d.id],
       precio: d.precio_unitario,
     }));
 
@@ -173,7 +195,10 @@ function DevolucionModal({
   };
 
   const procesarDevolucion = async () => {
-    if (itemsDevueltos.length === 0) {
+    const totalParaDevolver = devolucionCompleta ? venta.total : totalDevuelto;
+    const itemsParaGuardar = devolucionCompleta ? [] : itemsDevueltos;
+
+    if (!devolucionCompleta && itemsDevueltos.length === 0) {
       setMensaje("Selecciona al menos un producto para devolver.");
       return;
     }
@@ -192,24 +217,28 @@ function DevolucionModal({
     try {
       const { error: insError } = await supabase.from("devoluciones").insert({
         venta_id: venta.id,
-        items: itemsDevueltos,
+        items: itemsParaGuardar,
         motivo: motivo.trim(),
-        total_devuelto: totalDevuelto,
-        sucursal_id: venta.sucursal_id,
+        total_devuelto: totalParaDevolver,
+        sucursal_id: venta.sucursal_id || null,
       });
       if (insError) throw insError;
 
       await supabase.from("ventas").update({ estado: "devuelta" }).eq("id", venta.id);
 
-      for (const item of itemsDevueltos) {
-        const { data: prodActual } = await supabase
-          .from("productos")
-          .select("stock")
-          .eq("id", item.producto_id)
-          .single();
-        if (prodActual) {
-          const nuevoStock = (prodActual.stock || 0) + item.cantidad_devuelta;
-          await supabase.from("productos").update({ stock: nuevoStock }).eq("id", item.producto_id);
+      if (!devolucionCompleta) {
+        for (const item of itemsDevueltos) {
+          if (item.producto_id) {
+            const { data: prodActual } = await supabase
+              .from("productos")
+              .select("stock")
+              .eq("id", item.producto_id)
+              .single();
+            if (prodActual) {
+              const nuevoStock = (prodActual.stock || 0) + item.cantidad_devuelta;
+              await supabase.from("productos").update({ stock: nuevoStock }).eq("id", item.producto_id);
+            }
+          }
         }
       }
 
@@ -217,9 +246,9 @@ function DevolucionModal({
         const motivoCaja = `Devolución venta #${venta.id.slice(0, 8)} - ${motivo.trim()}`;
         await supabase.from("movimientos_caja").insert({
           tipo: "salida",
-          monto: totalDevuelto,
+          monto: totalParaDevolver,
           motivo: motivoCaja,
-          sucursal_id: venta.sucursal_id,
+          sucursal_id: venta.sucursal_id || null,
         });
       }
 
@@ -230,7 +259,7 @@ function DevolucionModal({
           .eq("id", clienteId)
           .single();
         if (clienteActual) {
-          const nuevosPuntos = (clienteActual.puntos || 0) + puntosAcreditar;
+          const nuevosPuntos = (clienteActual.puntos || 0) + Math.floor(totalParaDevolver * PUNTOS_POR_DOLAR);
           await supabase.from("clientes").update({ puntos: nuevosPuntos }).eq("id", clienteId);
         }
       }
@@ -253,29 +282,62 @@ function DevolucionModal({
           <p className="text-gray-600">Cargando productos...</p>
         ) : (
           <>
-            <div className="space-y-3 mb-4">
-              {detalles.map((detalle: any) => (
-                <div key={detalle.producto_id} className="flex items-center gap-3 bg-gray-50 p-3 rounded-lg">
-                  <div className="flex-1">
-                    <p className="font-medium text-gray-900">{detalle.productos?.nombre || "Producto"}</p>
-                    <p className="text-sm text-gray-600">
-                      Vendido: {detalle.cantidad} x ${detalle.precio_unitario.toFixed(2)}
-                    </p>
-                  </div>
-                  <div className="w-24">
-                    <label className="text-xs text-gray-500">A devolver</label>
-                    <input
-                      type="number"
-                      min={0}
-                      max={detalle.cantidad}
-                      value={cantidades[detalle.producto_id] || 0}
-                      onChange={(e) => handleCantidadChange(detalle.producto_id, parseInt(e.target.value) || 0)}
-                      className="w-full border border-gray-300 rounded px-2 py-1 text-sm text-gray-900"
-                    />
-                  </div>
+            {detalles.length === 0 ? (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+                <p className="text-sm text-yellow-800">
+                  Esta venta no tiene desglose de productos (venta antigua). Se devolverá el total completo.
+                </p>
+                <button
+                  onClick={() => setDevolucionCompleta(true)}
+                  className="mt-2 w-full py-2 rounded-lg text-sm font-medium bg-yellow-100 text-yellow-800 hover:bg-yellow-200 border border-yellow-300 transition-colors"
+                >
+                  Confirmar devolución completa
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="flex gap-2 mb-4">
+                  <button
+                    onClick={devolverTodo}
+                    className="flex-1 py-2 rounded-lg text-sm font-medium bg-orange-50 text-orange-700 hover:bg-orange-100 border border-orange-200 transition-colors"
+                  >
+                    🎫 Devolver ticket completo
+                  </button>
+                  <button
+                    onClick={limpiarSeleccion}
+                    className="flex-1 py-2 rounded-lg text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-300 transition-colors"
+                  >
+                    🧹 Limpiar selección
+                  </button>
                 </div>
-              ))}
-            </div>
+
+                <div className="space-y-3 mb-4">
+                  {detalles.map((detalle: any) => (
+                    <div key={detalle.id} className="flex items-center gap-3 bg-gray-50 p-3 rounded-lg">
+                      <div className="flex-1">
+                        <p className="font-medium text-gray-900">
+                          {detalle.productos?.nombre || detalle.descripcion || "Producto"}
+                        </p>
+                        <p className="text-sm text-gray-600">
+                          Vendido: {detalle.cantidad} x ${detalle.precio_unitario.toFixed(2)}
+                        </p>
+                      </div>
+                      <div className="w-24">
+                        <label className="text-xs text-gray-500">A devolver</label>
+                        <input
+                          type="number"
+                          min={0}
+                          max={detalle.cantidad}
+                          value={cantidades[detalle.id] || 0}
+                          onChange={(e) => handleCantidadChange(detalle.id, parseInt(e.target.value) || 0)}
+                          className="w-full border border-gray-300 rounded px-2 py-1 text-sm text-gray-900"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
 
             <div className="mb-4">
               <label className="block text-sm font-semibold text-gray-900 mb-1">Motivo de la devolución</label>
@@ -296,12 +358,15 @@ function DevolucionModal({
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white text-gray-900"
               >
                 {ventaEfectivo && (
-                  <option value="efectivo">Efectivo (se registra salida en caja)</option>
+                  <option value="efectivo">Efectivo (se descuenta de caja)</option>
                 )}
                 <option value="puntos">Acreditar puntos a cliente</option>
+                {!ventaEfectivo && venta.metodo_pago !== "mixto" && (
+                  <option value="ninguno">No aplicar nada (cancelación)</option>
+                )}
               </select>
-              {!ventaEfectivo && (
-                <p className="text-xs text-gray-600 mt-1">Esta venta fue con {venta.metodo_pago}. Solo se permite acreditar puntos.</p>
+              {venta.metodo_pago === "mixto" && (
+                <p className="text-xs text-gray-600 mt-1">Para ventas mixtas solo se permite acreditar puntos.</p>
               )}
             </div>
 
@@ -379,8 +444,22 @@ function DevolucionModal({
             )}
 
             <div className="bg-gray-100 rounded-lg p-3 mb-4 flex justify-between items-center">
-              <span className="text-sm font-medium text-gray-700">Total a devolver</span>
-              <span className="text-lg font-bold text-red-600">${totalDevuelto.toFixed(2)}</span>
+              <div>
+                <span className="text-sm font-medium text-gray-700">Total a devolver</span>
+                {devolucionCompleta && <span className="ml-2 text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full">Venta completa (sin desglose)</span>}
+                {!devolucionCompleta && itemsDevueltos.length === detalles.length && totalDevuelto > 0 && (
+                  <span className="ml-2 text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full">Ticket completo</span>
+                )}
+                {!devolucionCompleta && itemsDevueltos.length > 0 && itemsDevueltos.length < detalles.length && (
+                  <span className="ml-2 text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full">Devolución parcial</span>
+                )}
+                {metodoReembolso === "ninguno" && (
+                  <span className="ml-2 text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">Sin reembolso</span>
+                )}
+              </div>
+              <span className="text-lg font-bold text-red-600">
+                ${devolucionCompleta ? venta.total.toFixed(2) : totalDevuelto.toFixed(2)}
+              </span>
             </div>
 
             {mensaje && (
@@ -428,22 +507,6 @@ export default function HistorialPage() {
   const [ventas, setVentas] = useState<Venta[]>([]);
   const [cargando, setCargando] = useState(false);
   const [ticketReimpresion, setTicketReimpresion] = useState<any>(null);
-  const reimprimirTicket = async (venta: Venta) => {
-    if (venta.estado === "devuelta") return;
-    const { data: detalles, error } = await supabase
-      .from("detalle_venta")
-      .select("cantidad, precio_unitario, productos(nombre)")
-      .eq("venta_id", venta.id);
-    if (error || !detalles) { alert("No se pudieron cargar los detalles."); return; }
-    let clienteNombre = null; let clienteTelefono = null;
-    if (venta.cliente_id) {
-      const { data: clienteData } = await supabase.from("clientes").select("nombre, telefono").eq("id", venta.cliente_id).single();
-      if (clienteData) { clienteNombre = clienteData.nombre; clienteTelefono = clienteData.telefono; }
-    }
-    const descuentoPuntos = venta.puntos_canjeados ? venta.puntos_canjeados / 10 : 0;
-    setTicketReimpresion({ venta, detalles, clienteNombre, clienteTelefono, descuentoPuntos, sucursalNombre: sucursalActiva?.nombre });
-    setWhatsappReimpresion(clienteTelefono || "");
-  };
   const [whatsappReimpresion, setWhatsappReimpresion] = useState("");
   const [ventaDevolucion, setVentaDevolucion] = useState<Venta | null>(null);
 
@@ -461,14 +524,14 @@ export default function HistorialPage() {
 
   const [devolucionesCount, setDevolucionesCount] = useState(0);
   const [devolucionesTotal, setDevolucionesTotal] = useState(0);
-  const [configTicket, setConfigTicket] = useState({
-  nombre_taller: "Bicicletas Castañeda",
-  direccion: "",
-  telefono: "",
-  mensaje_ticket: "¡Gracias por tu compra!",
-});
 
-  // Función actualizarPeriodo con hora local (ya corregida)
+  const [configTicket, setConfigTicket] = useState({
+    nombre_taller: "Bicicletas Castañeda",
+    direccion: "",
+    telefono: "",
+    mensaje_ticket: "¡Gracias por tu compra!",
+  });
+
   const actualizarPeriodo = (nuevoPeriodo: string) => {
     setPeriodo(nuevoPeriodo);
     const hoy = new Date();
@@ -609,20 +672,35 @@ export default function HistorialPage() {
   };
 
   useEffect(() => {
-  cargarVentas();
-  
-  // Cargar configuración de la tienda
-  supabase.from("configuracion").select("*").eq("id", 1).single().then(({ data }) => {
-    if (data) {
-      setConfigTicket({
-        nombre_taller: data.nombre_taller || "Bicicletas Castañeda",
-        direccion: data.direccion || "",
-        telefono: data.telefono || "",
-        mensaje_ticket: data.mensaje_ticket || "¡Gracias por tu compra!",
-      });
+    cargarVentas();
+    supabase.from("configuracion").select("*").eq("id", 1).single().then(({ data }) => {
+      if (data) {
+        setConfigTicket({
+          nombre_taller: data.nombre_taller || "Bicicletas Castañeda",
+          direccion: data.direccion || "",
+          telefono: data.telefono || "",
+          mensaje_ticket: data.mensaje_ticket || "¡Gracias por tu compra!",
+        });
+      }
+    });
+  }, [fechaInicio, fechaFin, sucursalId]);
+
+  const reimprimirTicket = async (venta: Venta) => {
+    if (venta.estado === "devuelta") return;
+    const { data: detalles, error } = await supabase
+      .from("detalle_venta")
+      .select("id, cantidad, precio_unitario, producto_id, productos(nombre)")
+      .eq("venta_id", venta.id);
+    if (error || !detalles) { alert("No se pudieron cargar los detalles."); return; }
+    let clienteNombre = null; let clienteTelefono = null;
+    if (venta.cliente_id) {
+      const { data: clienteData } = await supabase.from("clientes").select("nombre, telefono").eq("id", venta.cliente_id).single();
+      if (clienteData) { clienteNombre = clienteData.nombre; clienteTelefono = clienteData.telefono; }
     }
-  });
-}, [fechaInicio, fechaFin, sucursalId]);
+    const descuentoPuntos = venta.puntos_canjeados ? venta.puntos_canjeados / 10 : 0;
+    setTicketReimpresion({ venta, detalles, clienteNombre, clienteTelefono, descuentoPuntos, sucursalNombre: sucursalActiva?.nombre });
+    setWhatsappReimpresion(clienteTelefono || "");
+  };
 
   const enviarWhatsAppReimpresion = () => {
     if (!ticketReimpresion) return;
@@ -637,12 +715,6 @@ export default function HistorialPage() {
     ticketReimpresion.detalles.forEach((item: any) => {
       mensaje += `- ${item.productos?.nombre || "Producto"} x${item.cantidad}: $${(item.precio_unitario * item.cantidad).toFixed(2)}\n`;
     });
-        if (ticketReimpresion.venta.descuentoManual && ticketReimpresion.venta.descuentoManual > 0) {
-      const montoDescManual = ticketReimpresion.venta.descuentoManualTipo === "porcentaje"
-        ? ((ticketReimpresion.detalles.reduce((acc, item) => acc + item.precio_unitario * item.cantidad, 0) * ticketReimpresion.venta.descuentoManual) / 100)
-        : ticketReimpresion.venta.descuentoManual;
-      mensaje += `\n*Descuento (${ticketReimpresion.venta.descuentoManualTipo === "porcentaje" ? ticketReimpresion.venta.descuentoManual + "%" : "$" + ticketReimpresion.venta.descuentoManual.toFixed(2)}):* -$${montoDescManual.toFixed(2)}\n`;
-    }
     if (ticketReimpresion.descuentoPuntos > 0) mensaje += `\n*Descuento por puntos:* -$${ticketReimpresion.descuentoPuntos.toFixed(2)}\n`;
     mensaje += `\n*Total: $${venta.total.toFixed(2)}*\nMétodo: ${venta.metodo_pago}\n`;
     if (venta.monto_recibido != null) { mensaje += `Recibido: $${venta.monto_recibido.toFixed(2)}\n`; if (venta.cambio != null) mensaje += `Cambio: $${venta.cambio.toFixed(2)}\n`; }
@@ -665,7 +737,7 @@ export default function HistorialPage() {
     const lineasHTML = detalles
       .map(
         (item: any) => `
-      <div style="display: flex; justify-content: space-between; font-size: 14px; padding: 2px 0;">
+      <div style="display: flex; justify-content: space-between; font-size: 12px; padding: 2px 0;">
         <span>${item.productos?.nombre || "Producto"} x${item.cantidad}</span>
         <span>$${(item.precio_unitario * item.cantidad).toFixed(2)}</span>
       </div>`
@@ -677,86 +749,78 @@ export default function HistorialPage() {
         <head>
           <meta charset="utf-8">
           <title>Ticket #${venta.id.slice(0, 8)}</title>
-         <style>
-  @page {
-    size: 58mm auto;
-    margin: 0;
-  }
-  body {
-    font-family: Arial, Helvetica, sans-serif;
-    width: 54mm;
-    margin: 0 auto;
-    padding: 2mm;
-    font-size: 16px;
-    font-weight: normal;
-  }
-  h2, p { margin: 3px 0; }
-  hr { border: 0; border-top: 1px dashed #000; margin: 4px 0; }
-  @media print {
-    body { 
-      margin: 0; 
-      width: 54mm;
-    }
-  }
-</style>
+          <style>
+            @page {
+              size: 58mm auto;
+              margin: 0;
+            }
+            body {
+              font-family: Arial, Helvetica, sans-serif;
+              width: 54mm;
+              margin: 0 auto;
+              padding: 2mm;
+              font-size: 16px;
+              font-weight: normal;
+            }
+            h2, p { margin: 3px 0; }
+            hr { border: 0; border-top: 1px dashed #000; margin: 4px 0; }
+            @media print {
+              body { 
+                margin: 0; 
+                width: 54mm;
+              }
+            }
+          </style>
         </head>
         <body>
-         <h2 style="text-align: center;">${configTicket.nombre_taller}</h2>
-${configTicket.direccion ? `<p style="text-align: center; font-size: 11px;">${configTicket.direccion}</p>` : ""}
-${configTicket.telefono ? `<p style="text-align: center; font-size: 11px;">Tel: ${configTicket.telefono}</p>` : ""}
-${sucursal ? `<p style="text-align: center; font-size: 11px;">Sucursal: ${sucursal}</p>` : ""}
-<p style="text-align: center; font-size: 10px;">Reimpresión</p>
-          <hr>
-          <p>Ticket #${venta.id.slice(0, 8)}</p>
-          <p>${new Date(venta.created_at).toLocaleString("es-MX")}</p>
-          <hr>
-                      ${lineasHTML}
-            ${
-              ticketReimpresion.venta.descuentoManual && ticketReimpresion.venta.descuentoManual > 0
-                ? `<div style="display: flex; justify-content: space-between; font-size: 12px; padding: 2px 0;">
-                    <span>Descuento (${ticketReimpresion.venta.descuentoManualTipo === "porcentaje" ? ticketReimpresion.venta.descuentoManual + "%" : "$" + ticketReimpresion.venta.descuentoManual.toFixed(2)})</span>
-                    <span>-$${ticketReimpresion.venta.descuentoManualTipo === "porcentaje"
-                      ? ((ticketReimpresion.detalles.reduce((acc, item) => acc + item.precio_unitario * item.cantidad, 0) * ticketReimpresion.venta.descuentoManual) / 100).toFixed(2)
-                      : ticketReimpresion.venta.descuentoManual.toFixed(2)}</span>
-                  </div>`
-                : ""
-            }
+          <div style="page-break-inside: avoid;">
+            <h2 style="text-align: center;">${configTicket.nombre_taller}</h2>
+            ${configTicket.direccion ? `<p style="text-align: center; font-size: 11px;">${configTicket.direccion}</p>` : ""}
+            ${configTicket.telefono ? `<p style="text-align: center; font-size: 11px;">Tel: ${configTicket.telefono}</p>` : ""}
+            ${sucursal ? `<p style="text-align: center; font-size: 11px;">Sucursal: ${sucursal}</p>` : ""}
+            <p style="text-align: center; font-size: 10px;">Reimpresión</p>
+            <hr>
+            <p>Ticket #${venta.id.slice(0, 8)}</p>
+            <p>${new Date(venta.created_at).toLocaleString("es-MX")}</p>
+            <hr>
+            ${lineasHTML}
             ${
               ticketReimpresion.descuentoPuntos > 0
                 ? `<div style="display: flex; justify-content: space-between; font-size: 12px; padding: 2px 0;">
-                    <span>Descuento por puntos</span>
+                    <span>Descuento puntos</span>
                     <span>-$${ticketReimpresion.descuentoPuntos.toFixed(2)}</span>
                   </div>`
                 : ""
             }
-          <hr>
-          <div style="display: flex; justify-content: space-between; font-size: 16px; font-weight: bold;">
-            <span>Total</span>
-            <span>$${venta.total.toFixed(2)}</span>
+            <hr>
+            <div style="display: flex; justify-content: space-between; font-size: 14px; font-weight: bold;">
+              <span>Total</span>
+              <span>$${venta.total.toFixed(2)}</span>
+            </div>
+            <p>Método: ${venta.metodo_pago}</p>
+            ${
+              venta.monto_recibido != null
+                ? `<p>Recibido: $${venta.monto_recibido.toFixed(2)}</p>
+                   ${
+                     venta.cambio != null
+                       ? `<p>Cambio: $${venta.cambio.toFixed(2)}</p>`
+                       : ""
+                   }`
+                : ""
+            }
+            ${
+              venta.detalle_pago
+                ? venta.detalle_pago
+                    .map((p: any) => `<p>${p.metodo}: $${p.monto.toFixed(2)}</p>`)
+                    .join("")
+                : ""
+            }
+            ${clienteNombre ? `<p>Cliente: ${clienteNombre}</p>` : ""}
+            ${venta.puntos_ganados > 0 ? `<p>Puntos ganados: +${venta.puntos_ganados}</p>` : ""}
+            ${venta.puntos_canjeados > 0 ? `<p>Puntos canjeados: -${venta.puntos_canjeados}</p>` : ""}
+            <hr>
+            <p style="text-align: center;">${configTicket.mensaje_ticket}</p>
           </div>
-          <p>Método: ${venta.metodo_pago}</p>
-          ${
-            venta.monto_recibido != null
-              ? `<p>Recibido: $${venta.monto_recibido.toFixed(2)}</p>
-                 ${
-                   venta.cambio != null
-                     ? `<p>Cambio: $${venta.cambio.toFixed(2)}</p>`
-                     : ""
-                 }`
-              : ""
-          }
-          ${
-            venta.detalle_pago
-              ? venta.detalle_pago
-                  .map((p: any) => `<p>${p.metodo}: $${p.monto.toFixed(2)}</p>`)
-                  .join("")
-              : ""
-          }
-          ${clienteNombre ? `<p>Cliente: ${clienteNombre}</p>` : ""}
-          ${venta.puntos_ganados > 0 ? `<p>Puntos ganados: +${venta.puntos_ganados}</p>` : ""}
-          ${venta.puntos_canjeados > 0 ? `<p>Puntos canjeados: -${venta.puntos_canjeados}</p>` : ""}
-          <hr>
-          <p style="text-align: center;">¡Gracias por tu compra!</p>
         </body>
       </html>
     `;
@@ -833,13 +897,17 @@ ${sucursal ? `<p style="text-align: center; font-size: 11px;">Sucursal: ${sucurs
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-3 sm:p-5 overflow-hidden">
             <h2 className="text-lg font-bold text-gray-900 mb-4">Ventas por día</h2>
-            {ventasPorDia.labels.length > 0 ? <Bar data={barData} options={barOptions} /> : <p className="text-gray-500 text-center py-8">Sin datos</p>}
+            <div className="w-full" style={{ maxWidth: "100%" }}>
+              {ventasPorDia.labels.length > 0 ? <Bar data={barData} options={{ ...barOptions, maintainAspectRatio: true }} /> : <p className="text-gray-500 text-center py-8">Sin datos</p>}
+            </div>
           </div>
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-3 sm:p-5 overflow-hidden">
             <h2 className="text-lg font-bold text-gray-900 mb-4">Distribución por método</h2>
-            {metodosPago.labels.length > 0 ? <Doughnut data={doughnutData} options={doughnutOptions} /> : <p className="text-gray-500 text-center py-8">Sin datos</p>}
+            <div className="w-full" style={{ maxWidth: "100%" }}>
+              {metodosPago.labels.length > 0 ? <Doughnut data={doughnutData} options={{ ...doughnutOptions, maintainAspectRatio: true }} /> : <p className="text-gray-500 text-center py-8">Sin datos</p>}
+            </div>
           </div>
         </div>
 
@@ -872,7 +940,6 @@ ${sucursal ? `<p style="text-align: center; font-size: 11px;">Sucursal: ${sucurs
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
           {cargando ? <p className="p-4 text-gray-800">Cargando ventas...</p> : ventas.length === 0 ? <p className="p-4 text-gray-800">No hay ventas en este período.</p> : (
             <>
-              {/* Tabla normal en escritorio (md hacia arriba) */}
               <div className="hidden md:block overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50 border-b border-gray-200">
@@ -894,32 +961,21 @@ ${sucursal ? `<p style="text-align: center; font-size: 11px;">Sucursal: ${sucurs
                           )}
                         </td>
                         <td className="px-4 py-3">
-  {venta.estado !== "devuelta" ? (
-    <div className="flex gap-2 flex-wrap">
-      <button
-        onClick={() => reimprimirTicket(venta)}
-        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 text-xs font-medium transition-colors"
-      >
-        🖨️ Reimprimir
-      </button>
-      <button
-        onClick={() => setVentaDevolucion(venta)}
-        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 text-xs font-medium transition-colors"
-      >
-        ↩️ Devolución
-      </button>
-    </div>
-  ) : (
-    <span className="text-xs text-gray-400">—</span>
-  )}
-</td>
+                          {venta.estado !== "devuelta" ? (
+                            <div className="flex gap-2 flex-wrap">
+                              <button onClick={() => reimprimirTicket(venta)} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 text-xs font-medium transition-colors">🖨️ Reimprimir</button>
+                              <button onClick={() => setVentaDevolucion(venta)} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 text-xs font-medium transition-colors">↩️ Devolución</button>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-gray-400">—</span>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
 
-              {/* Tarjetas en móvil (menos de md) */}
               <div className="md:hidden divide-y divide-gray-100">
                 {ventas.map((venta) => (
                   <div key={venta.id} className={`p-4 ${venta.estado === "devuelta" ? "bg-red-50" : ""}`}>
@@ -943,8 +999,8 @@ ${sucursal ? `<p style="text-align: center; font-size: 11px;">Sucursal: ${sucurs
                     </div>
                     {venta.estado !== "devuelta" && (
                       <div className="flex gap-3 mt-3">
-                        <button onClick={() => reimprimirTicket(venta)} className="text-green-600 text-xs font-medium underline">Reimprimir</button>
-                        <button onClick={() => setVentaDevolucion(venta)} className="text-red-600 text-xs font-medium underline">Devolución</button>
+                        <button onClick={() => reimprimirTicket(venta)} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 text-xs font-medium transition-colors">🖨️ Reimprimir</button>
+                        <button onClick={() => setVentaDevolucion(venta)} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 text-xs font-medium transition-colors">↩️ Devolución</button>
                       </div>
                     )}
                   </div>
@@ -961,7 +1017,7 @@ ${sucursal ? `<p style="text-align: center; font-size: 11px;">Sucursal: ${sucurs
           <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto ticket-print">
             <div className="text-center mb-4">
               <h2 className="text-xl font-bold text-gray-900">🧾 Comprobante de Venta</h2>
-              <p className="text-sm text-gray-800 font-medium">Bicicletas Castañeda</p>
+              <p className="text-sm text-gray-800 font-medium">{configTicket.nombre_taller}</p>
               {ticketReimpresion.sucursalNombre && <p className="text-xs text-gray-600">{ticketReimpresion.sucursalNombre}</p>}
               <p className="text-sm text-gray-900 mt-1">#{ticketReimpresion.venta.id.slice(0, 8)}</p>
               <p className="text-sm text-gray-800">{new Date(ticketReimpresion.venta.created_at).toLocaleString("es-MX")}</p>
@@ -969,22 +1025,6 @@ ${sucursal ? `<p style="text-align: center; font-size: 11px;">Sucursal: ${sucurs
             <div className="border-t border-dashed border-gray-400 pt-3 mb-3">
               {ticketReimpresion.detalles.map((item: any, idx: number) => (<div key={idx} className="flex justify-between text-sm py-1 text-gray-900"><span className="font-medium">{item.productos?.nombre || "Producto"} x{item.cantidad}</span><span className="font-semibold">${(item.precio_unitario * item.cantidad).toFixed(2)}</span></div>))}
             </div>
-            {ticketReimpresion.venta.descuentoManual && ticketReimpresion.venta.descuentoManual > 0 && (
-  <div className="flex justify-between text-sm text-yellow-700 font-medium py-1">
-    <span>Descuento ({ticketReimpresion.venta.descuentoManualTipo === "porcentaje" ? ticketReimpresion.venta.descuentoManual + "%" : "$" + ticketReimpresion.venta.descuentoManual.toFixed(2)})</span>
-    <span>-${ticketReimpresion.venta.descuentoManualTipo === "porcentaje"
-      ? ((ticketReimpresion.detalles.reduce((acc, item) => acc + item.precio_unitario * item.cantidad, 0) * ticketReimpresion.venta.descuentoManual) / 100).toFixed(2)
-      : ticketReimpresion.venta.descuentoManual.toFixed(2)}</span>
-  </div>
-)}
-                                              {ticketReimpresion.venta.descuentoManual && ticketReimpresion.venta.descuentoManual > 0 && (
-                                                <div className="flex justify-between text-sm text-yellow-700 font-medium py-1">
-                                                  <span>Descuento ({ticketReimpresion.venta.descuentoManualTipo === "porcentaje" ? ticketReimpresion.venta.descuentoManual + "%" : "$" + ticketReimpresion.venta.descuentoManual.toFixed(2)})</span>
-                                                  <span>-${ticketReimpresion.venta.descuentoManualTipo === "porcentaje"
-                                                    ? ((ticketReimpresion.detalles.reduce((acc: number, item: any) => acc + item.precio_unitario * item.cantidad, 0) * ticketReimpresion.venta.descuentoManual) / 100).toFixed(2)
-                                                    : ticketReimpresion.venta.descuentoManual.toFixed(2)}</span>
-                                                </div>
-                                              )}
             {ticketReimpresion.descuentoPuntos > 0 && <div className="flex justify-between text-sm text-green-700 font-medium py-1"><span>Descuento por puntos</span><span>-${ticketReimpresion.descuentoPuntos.toFixed(2)}</span></div>}
             <div className="border-t border-dashed border-gray-400 pt-2 mt-2 space-y-2 text-sm">
               <div className="flex justify-between font-bold text-base text-gray-900"><span>Total</span><span>${ticketReimpresion.venta.total.toFixed(2)}</span></div>
@@ -996,7 +1036,7 @@ ${sucursal ? `<p style="text-align: center; font-size: 11px;">Sucursal: ${sucurs
               {ticketReimpresion.venta.puntos_ganados > 0 && <div className="flex justify-between text-green-700 font-medium"><span>Puntos ganados</span><span>+{ticketReimpresion.venta.puntos_ganados}</span></div>}
               {ticketReimpresion.venta.puntos_canjeados > 0 && <div className="flex justify-between text-orange-700"><span>Puntos canjeados</span><span>-{ticketReimpresion.venta.puntos_canjeados}</span></div>}
             </div>
-            <p className="text-center mt-3 text-sm text-gray-800 font-medium">¡Gracias por tu compra!</p>
+            <p className="text-center mt-3 text-sm text-gray-800 font-medium">{configTicket.mensaje_ticket}</p>
             <div className="mt-4 border-t border-gray-300 pt-4 no-print">
               <label className="block text-sm font-medium text-gray-900 mb-1">Enviar por WhatsApp</label>
               <div className="flex gap-2"><input type="text" value={whatsappReimpresion} onChange={(e) => setWhatsappReimpresion(e.target.value)} placeholder="Número de teléfono" className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 placeholder-gray-500" /><button onClick={enviarWhatsAppReimpresion} className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-1">💬 Enviar</button></div>
