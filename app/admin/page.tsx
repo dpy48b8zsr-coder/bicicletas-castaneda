@@ -48,6 +48,8 @@ interface Cliente {
 interface ItemCarrito {
   producto: Producto;
   cantidad: number;
+  descuento: number;
+  descuentoTipo: "porcentaje" | "monto";
 }
 
 type MetodoPago = "efectivo" | "tarjeta" | "transferencia" | "credito" | "mixto";
@@ -139,11 +141,9 @@ function CajaModal({ onClose, sucursalId }: { onClose: () => void; sucursalId?: 
       let montoInicial = 0;
 
       if (ultimoCorte?.fecha_fin) {
-        // La caja continúa desde el último corte, sin importar si fue hoy o ayer
         inicioEfectivo = ultimoCorte.fecha_fin;
         montoInicial = ultimoCorte.efectivo_real || 0;
       } else {
-        // Nunca se ha hecho un corte: empezamos desde cero o el monto guardado para hoy
         inicioEfectivo = hoyStr + "T00:00:00";
         const { data: cajaInicial } = await supabase
           .from("caja_diaria")
@@ -406,6 +406,7 @@ function PosPage() {
     carrito,
     agregarAlCarrito,
     eliminarDelCarrito,
+    actualizarCantidadItem,
     actualizarDescuentoItem,
     vaciarCarrito,
     subtotal,
@@ -1098,14 +1099,34 @@ function PosPage() {
                       <div className="flex items-center justify-between">
                         <div className="flex-1 min-w-0">
                           <p className="font-medium text-gray-900 text-xs truncate">{item.producto.nombre}</p>
-                          <p className="text-xs text-gray-500">
-                            ${item.producto.precio.toFixed(2)} x {item.cantidad}
-                            {item.descuento > 0 && (
-                              <span className="text-yellow-600 ml-1">
-                                (-${descuentoAplicado.toFixed(2)})
-                              </span>
-                            )}
-                          </p>
+                          <div className="flex items-center gap-1 mt-1">
+                            <span className="text-xs text-gray-500">Cant:</span>
+                            <button
+                              onClick={() => actualizarCantidadItem(item.producto.id, item.cantidad - 1)}
+                              className="w-6 h-6 bg-gray-200 hover:bg-gray-300 rounded text-gray-700 text-xs font-bold"
+                            >
+                              -
+                            </button>
+                            <input
+                              type="number"
+                              min="1"
+                              max={item.producto.stock}
+                              value={item.cantidad}
+                              onChange={(e) => actualizarCantidadItem(item.producto.id, parseInt(e.target.value) || 1)}
+                              className="w-12 border border-gray-300 rounded px-1 py-0.5 text-xs text-gray-900 text-center"
+                            />
+                            <button
+                              onClick={() => actualizarCantidadItem(item.producto.id, item.cantidad + 1)}
+                              className="w-6 h-6 bg-gray-200 hover:bg-gray-300 rounded text-gray-700 text-xs font-bold"
+                            >
+                              +
+                            </button>
+                          </div>
+                          {item.descuento > 0 && (
+                            <p className="text-xs text-yellow-600 mt-1">
+                              Descuento: -${descuentoAplicado.toFixed(2)}
+                            </p>
+                          )}
                         </div>
                         <div className="flex items-center gap-2 ml-2">
                           <span className="font-semibold text-gray-800 text-xs">${precioFinal.toFixed(2)}</span>

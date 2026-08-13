@@ -40,6 +40,7 @@ interface VentaContextType {
   carrito: ItemCarrito[];
   agregarAlCarrito: (producto: Producto) => void;
   eliminarDelCarrito: (id: string) => void;
+  actualizarCantidadItem: (id: string, cantidad: number) => void;
   actualizarDescuentoItem: (id: string, descuento: number, tipo: "porcentaje" | "monto") => void;
   vaciarCarrito: () => void;
   subtotal: number;
@@ -106,14 +107,30 @@ export function VentaProvider({ children }: { children: ReactNode }) {
     }));
   }, [actualizarTicketActivo]);
 
+  const actualizarCantidadItem = useCallback((id: string, cantidad: number) => {
+    actualizarTicketActivo(ticket => ({
+      ...ticket,
+      carrito: ticket.carrito
+        .map(item => {
+          if (item.producto.id === id) {
+            const max = item.producto.stock;
+            const nuevaCantidad = Math.min(Math.max(1, cantidad), max);
+            return { ...item, cantidad: nuevaCantidad };
+          }
+          return item;
+        })
+        .filter(item => item.cantidad > 0)
+    }));
+  }, [actualizarTicketActivo]);
+
   const actualizarDescuentoItem = useCallback((id: string, descuento: number, tipo: "porcentaje" | "monto") => {
-  actualizarTicketActivo(ticket => ({
-    ...ticket,
-    carrito: ticket.carrito.map(item =>
-      item.producto.id === id ? { ...item, descuento, descuentoTipo: tipo } : item
-    )
-  }));
-}, [actualizarTicketActivo]);
+    actualizarTicketActivo(ticket => ({
+      ...ticket,
+      carrito: ticket.carrito.map(item =>
+        item.producto.id === id ? { ...item, descuento, descuentoTipo: tipo } : item
+      )
+    }));
+  }, [actualizarTicketActivo]);
 
   const vaciarCarrito = useCallback(() => {
     actualizarTicketActivo(ticket => ({
@@ -189,7 +206,14 @@ export function VentaProvider({ children }: { children: ReactNode }) {
     });
   }, [tickets]);
 
-  const subtotal = ticketActivo.carrito.reduce((acc, item) => acc + item.producto.precio * item.cantidad, 0);
+  const subtotal = ticketActivo.carrito.reduce((acc, item) => {
+    const precioOriginal = item.producto.precio * item.cantidad;
+    const descuentoItem = item.descuentoTipo === "porcentaje"
+      ? (precioOriginal * item.descuento) / 100
+      : item.descuento;
+    return acc + precioOriginal - descuentoItem;
+  }, 0);
+
   const montoDescuentoManual = ticketActivo.descuentoManualTipo === "porcentaje"
     ? (subtotal * ticketActivo.descuentoManual) / 100
     : ticketActivo.descuentoManual;
@@ -203,6 +227,8 @@ export function VentaProvider({ children }: { children: ReactNode }) {
         carrito: ticketActivo.carrito,
         agregarAlCarrito,
         eliminarDelCarrito,
+        actualizarCantidadItem,
+        actualizarDescuentoItem,
         vaciarCarrito,
         subtotal,
         total,
@@ -221,7 +247,6 @@ export function VentaProvider({ children }: { children: ReactNode }) {
         crearNuevoTicket,
         cambiarTicket,
         cerrarTicket,
-        actualizarDescuentoItem,
       }}
     >
       {children}
