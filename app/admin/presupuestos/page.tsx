@@ -46,7 +46,6 @@ export default function PresupuestosPage() {
   const [productos, setProductos] = useState<Producto[]>([]);
   const [cargando, setCargando] = useState(false);
 
-  // Modal
   const [mostrarForm, setMostrarForm] = useState(false);
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [clienteId, setClienteId] = useState<string>("");
@@ -62,11 +61,13 @@ export default function PresupuestosPage() {
     const [{ data: pres }, { data: cli }, { data: prods }] = await Promise.all([
       supabase.from("presupuestos")
         .select("*, clientes(nombre)")
+        .eq("sucursal_id", sucursalId)
         .order("created_at", { ascending: false }),
       supabase.from("clientes").select("id, nombre").order("nombre"),
       supabase.from("productos")
         .select("id, nombre, precio, stock")
         .eq("activo", true)
+        .eq("sucursal_id", sucursalId)
         .order("nombre"),
     ]);
     if (pres) setPresupuestos(pres);
@@ -90,13 +91,14 @@ export default function PresupuestosPage() {
         .from("productos")
         .select("id, nombre, precio, stock")
         .eq("activo", true)
+        .eq("sucursal_id", sucursalId)
         .or(`nombre.ilike.${term},sku.ilike.${term},codigo_barras.ilike.${term}`)
         .limit(5);
       if (data) setResultadosBusqueda(data);
     };
     const timer = setTimeout(buscar, 200);
     return () => clearTimeout(timer);
-  }, [busquedaProducto]);
+  }, [busquedaProducto, sucursalId]);
 
   const abrirNuevo = () => {
     setEditandoId(null);
@@ -165,8 +167,8 @@ export default function PresupuestosPage() {
       cliente_id: clienteId,
       total: totalPresupuesto,
       notas: notas.trim() || null,
+      sucursal_id: sucursalId,
     };
-    if (sucursalId) payload.sucursal_id = sucursalId;
 
     let presupuestoId: string | null = editandoId;
 
@@ -286,7 +288,6 @@ export default function PresupuestosPage() {
     const lineas = lineasData || [];
     const nombreCliente = presupuesto.clientes?.nombre || "No asignado";
     
-    // Obtener teléfono del cliente
     const { data: clienteData } = await supabase
       .from("clientes")
       .select("telefono")
@@ -368,47 +369,17 @@ export default function PresupuestosPage() {
                     <td className="px-4 py-3 text-right font-semibold text-gray-900">${p.total.toFixed(2)}</td>
                     <td className="px-4 py-3">
                       <div className="flex gap-2 flex-wrap">
-                        <button
-                          onClick={() => abrirEditar(p)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 text-xs font-medium transition-colors"
-                        >
-                          ✏️ Editar
-                        </button>
-                        <button
-                          onClick={() => descargarPDF(p)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-gray-50 text-gray-700 hover:bg-gray-100 border border-gray-200 text-xs font-medium transition-colors"
-                        >
-                          📄 PDF
-                        </button>
-                        <button
-                          onClick={() => enviarWhatsAppPresupuesto(p)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 text-xs font-medium transition-colors"
-                        >
-                          💬 WhatsApp
-                        </button>
+                        <button onClick={() => abrirEditar(p)} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 text-xs font-medium transition-colors">✏️ Editar</button>
+                        <button onClick={() => descargarPDF(p)} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-gray-50 text-gray-700 hover:bg-gray-100 border border-gray-200 text-xs font-medium transition-colors">📄 PDF</button>
+                        <button onClick={() => enviarWhatsAppPresupuesto(p)} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 text-xs font-medium transition-colors">💬 WhatsApp</button>
                         {p.estado === "pendiente" && (
                           <>
-                            <button
-                              onClick={() => cambiarEstado(p.id, "aprobado")}
-                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 text-xs font-medium transition-colors"
-                            >
-                              ✅ Aprobar
-                            </button>
-                            <button
-                              onClick={() => cambiarEstado(p.id, "rechazado")}
-                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 text-xs font-medium transition-colors"
-                            >
-                              ❌ Rechazar
-                            </button>
+                            <button onClick={() => cambiarEstado(p.id, "aprobado")} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 text-xs font-medium transition-colors">✅ Aprobar</button>
+                            <button onClick={() => cambiarEstado(p.id, "rechazado")} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 text-xs font-medium transition-colors">❌ Rechazar</button>
                           </>
                         )}
                         {p.estado === "aprobado" && (
-                          <button
-                            onClick={() => convertirEnVenta(p.id)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 text-xs font-medium transition-colors"
-                          >
-                            🛒 Convertir en venta
-                          </button>
+                          <button onClick={() => convertirEnVenta(p.id)} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 text-xs font-medium transition-colors">🛒 Convertir en venta</button>
                         )}
                       </div>
                     </td>
@@ -434,56 +405,22 @@ export default function PresupuestosPage() {
                   <h3 className="font-semibold text-gray-900">{p.clientes?.nombre || "Sin cliente"}</h3>
                   <p className="text-xs text-gray-500">{new Date(p.created_at).toLocaleDateString("es-MX")}</p>
                 </div>
-                <span className={`text-xs px-2 py-1 rounded-full font-medium ${
-                  p.estado === "pendiente" ? "bg-yellow-100 text-yellow-900" :
-                  p.estado === "aprobado" ? "bg-green-100 text-green-900" :
-                  "bg-red-100 text-red-900"
-                }`}>{p.estado}</span>
+                <span className={`text-xs px-2 py-1 rounded-full font-medium ${p.estado === "pendiente" ? "bg-yellow-100 text-yellow-900" : p.estado === "aprobado" ? "bg-green-100 text-green-900" : "bg-red-100 text-red-900"}`}>{p.estado}</span>
               </div>
               <div className="mt-2 flex items-center justify-between">
                 <span className="text-lg font-bold text-green-700">${p.total.toFixed(2)}</span>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => abrirEditar(p)}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 text-xs font-medium transition-colors"
-                  >
-                    ✏️ Editar
-                  </button>
-                  <button
-                    onClick={() => descargarPDF(p)}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-gray-50 text-gray-700 hover:bg-gray-100 border border-gray-200 text-xs font-medium transition-colors"
-                  >
-                    📄 PDF
-                  </button>
-                  <button
-                    onClick={() => enviarWhatsAppPresupuesto(p)}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 text-xs font-medium transition-colors"
-                  >
-                    💬 WhatsApp
-                  </button>
+                <div className="flex gap-2 flex-wrap">
+                  <button onClick={() => abrirEditar(p)} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 text-xs font-medium transition-colors">✏️ Editar</button>
+                  <button onClick={() => descargarPDF(p)} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-gray-50 text-gray-700 hover:bg-gray-100 border border-gray-200 text-xs font-medium transition-colors">📄 PDF</button>
+                  <button onClick={() => enviarWhatsAppPresupuesto(p)} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 text-xs font-medium transition-colors">💬 WhatsApp</button>
                   {p.estado === "pendiente" && (
                     <>
-                      <button
-                        onClick={() => cambiarEstado(p.id, "aprobado")}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 text-xs font-medium transition-colors"
-                      >
-                        ✅ Aprobar
-                      </button>
-                      <button
-                        onClick={() => cambiarEstado(p.id, "rechazado")}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 text-xs font-medium transition-colors"
-                      >
-                        ❌ Rechazar
-                      </button>
+                      <button onClick={() => cambiarEstado(p.id, "aprobado")} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 text-xs font-medium transition-colors">✅ Aprobar</button>
+                      <button onClick={() => cambiarEstado(p.id, "rechazado")} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 text-xs font-medium transition-colors">❌ Rechazar</button>
                     </>
                   )}
                   {p.estado === "aprobado" && (
-                    <button
-                      onClick={() => convertirEnVenta(p.id)}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 text-xs font-medium transition-colors"
-                    >
-                      🛒 Convertir en venta
-                    </button>
+                    <button onClick={() => convertirEnVenta(p.id)} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 text-xs font-medium transition-colors">🛒 Convertir en venta</button>
                   )}
                 </div>
               </div>
