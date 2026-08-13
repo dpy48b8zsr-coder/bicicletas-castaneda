@@ -152,28 +152,26 @@ export default function ClientesPage() {
     cargarClientes();
   };
 
-  // Abrir estado de cuenta
+  // Abrir estado de cuenta (muestra todas las ventas a crédito y abonos, sin importar sucursal)
   const abrirEstadoCuenta = async (cliente: Cliente) => {
     setClienteSeleccionado(cliente);
     setMostrarEstadoCuenta(true);
 
-    // Cargar ventas a crédito (método 'credito') de este cliente, filtradas por sucursal
-    let queryVentas = supabase
+    // Cargar ventas a crédito del cliente
+    const { data: ventasData } = await supabase
       .from("ventas")
       .select("id, total, created_at")
       .eq("cliente_id", cliente.id)
-      .eq("metodo_pago", "credito");
-    if (sucursalId) queryVentas = queryVentas.eq("sucursal_id", sucursalId);
-    const { data: ventasData } = await queryVentas.order("created_at", { ascending: false });
+      .eq("metodo_pago", "credito")
+      .order("created_at", { ascending: false });
     setVentasCredito(ventasData || []);
 
-    // Cargar abonos, filtrados por sucursal
-    let queryAbonos = supabase
+    // Cargar abonos del cliente
+    const { data: abonosData } = await supabase
       .from("abonos_credito")
       .select("id, monto, motivo, metodo_pago, created_at")
-      .eq("cliente_id", cliente.id);
-    if (sucursalId) queryAbonos = queryAbonos.eq("sucursal_id", sucursalId);
-    const { data: abonosData } = await queryAbonos.order("created_at", { ascending: false });
+      .eq("cliente_id", cliente.id)
+      .order("created_at", { ascending: false });
     setAbonos(abonosData || []);
 
     setMontoAbono("");
@@ -265,25 +263,25 @@ export default function ClientesPage() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex gap-2">
-  <button
-    onClick={() => abrirEstadoCuenta(cliente)}
-    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 text-xs font-medium transition-colors"
-  >
-    💰 Estado de cuenta
-  </button>
-  <button
-    onClick={() => abrirEditar(cliente)}
-    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 text-xs font-medium transition-colors"
-  >
-    ✏️ Editar
-  </button>
-  <button
-    onClick={() => setEliminandoId(cliente.id)}
-    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 text-xs font-medium transition-colors"
-  >
-    🗑️ Eliminar
-  </button>
-</div>
+                        <button
+                          onClick={() => abrirEstadoCuenta(cliente)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 text-xs font-medium transition-colors"
+                        >
+                          💰 Estado de cuenta
+                        </button>
+                        <button
+                          onClick={() => abrirEditar(cliente)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 text-xs font-medium transition-colors"
+                        >
+                          ✏️ Editar
+                        </button>
+                        <button
+                          onClick={() => setEliminandoId(cliente.id)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 text-xs font-medium transition-colors"
+                        >
+                          🗑️ Eliminar
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -309,31 +307,16 @@ export default function ClientesPage() {
                 <span className="font-bold text-green-700">{cliente.puntos} pts</span>
               </div>
               <div className="flex gap-2 mt-2">
-  <button
-    onClick={() => abrirEstadoCuenta(cliente)}
-    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 text-xs font-medium transition-colors"
-  >
-    💰 Estado de cuenta
-  </button>
-  <button
-    onClick={() => abrirEditar(cliente)}
-    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 text-xs font-medium transition-colors"
-  >
-    ✏️ Editar
-  </button>
-  <button
-    onClick={() => setEliminandoId(cliente.id)}
-    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 text-xs font-medium transition-colors"
-  >
-    🗑️ Eliminar
-  </button>
-</div>
+                <button onClick={() => abrirEstadoCuenta(cliente)} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 text-xs font-medium transition-colors">💰 Estado de cuenta</button>
+                <button onClick={() => abrirEditar(cliente)} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 text-xs font-medium transition-colors">✏️ Editar</button>
+                <button onClick={() => setEliminandoId(cliente.id)} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 text-xs font-medium transition-colors">🗑️ Eliminar</button>
+              </div>
             </div>
           ))
         )}
       </div>
 
-      {/* Modal formulario (sin cambios) */}
+      {/* Modal formulario */}
       {mostrarFormulario && (
         <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md border border-gray-200 max-h-[90vh] overflow-y-auto">
