@@ -97,15 +97,18 @@ function OrdenTallerPage() {
     ] = await Promise.all([
       supabase.from("ordenes_taller")
         .select("*, clientes(nombre)")
+        .eq("sucursal_id", sucursalId)
         .order("created_at", { ascending: false }),
       supabase.from("clientes").select("id, nombre").order("nombre"),
       supabase.from("citas_taller")
         .select("id, fecha_hora, clientes(nombre)")
+        .eq("sucursal_id", sucursalId)
         .order("fecha_hora", { ascending: false })
         .limit(20),
       supabase.from("productos")
         .select("id, nombre, precio, stock")
         .eq("activo", true)
+        .eq("sucursal_id", sucursalId)
         .order("nombre"),
     ]);
     if (ordenesData) setOrdenes(ordenesData);
@@ -154,13 +157,14 @@ function OrdenTallerPage() {
         .from("productos")
         .select("id, nombre, precio, stock")
         .eq("activo", true)
+        .eq("sucursal_id", sucursalId)
         .or(`nombre.ilike.${term},sku.ilike.${term},codigo_barras.ilike.${term}`)
         .limit(5);
       if (data) setResultadosBusqueda(data);
     };
     const timer = setTimeout(buscar, 200);
     return () => clearTimeout(timer);
-  }, [busquedaProducto]);
+  }, [busquedaProducto, sucursalId]);
 
   const abrirNueva = () => {
     setEditandoId(null);
@@ -267,8 +271,8 @@ function OrdenTallerPage() {
       estado: estado,
       total: totalOrden,
       notas: notas.trim() || null,
+      sucursal_id: sucursalId,
     };
-    if (sucursalId) payload.sucursal_id = sucursalId;
 
     setGuardando(true);
     let ordenId: string | null = editandoId;
@@ -467,18 +471,8 @@ function OrdenTallerPage() {
                     <td className="px-4 py-3 text-right font-semibold text-gray-900">${o.total.toFixed(2)}</td>
                     <td className="px-4 py-3">
                       <div className="flex gap-2 flex-wrap">
-                        <button
-                          onClick={() => abrirEditar(o)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 text-xs font-medium transition-colors"
-                        >
-                          ✏️ Editar
-                        </button>
-                        <button
-                          onClick={() => descargarPDF(o)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-gray-50 text-gray-700 hover:bg-gray-100 border border-gray-200 text-xs font-medium transition-colors"
-                        >
-                          📄 PDF
-                        </button>
+                        <button onClick={() => abrirEditar(o)} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 text-xs font-medium transition-colors">✏️ Editar</button>
+                        <button onClick={() => descargarPDF(o)} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-gray-50 text-gray-700 hover:bg-gray-100 border border-gray-200 text-xs font-medium transition-colors">📄 PDF</button>
                         <select
                           value={o.estado}
                           onChange={(e) => cambiarEstado(o.id, e.target.value, o.cita_id)}
@@ -487,12 +481,7 @@ function OrdenTallerPage() {
                           {ESTADOS.map(e => <option key={e} value={e}>{e.replace(/_/g, " ")}</option>)}
                         </select>
                         {o.estado !== "facturada" && (
-                          <button
-                            onClick={() => convertirEnVenta(o)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 text-xs font-medium transition-colors"
-                          >
-                            🛒 Convertir en venta
-                          </button>
+                          <button onClick={() => convertirEnVenta(o)} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 text-xs font-medium transition-colors">🛒 Convertir en venta</button>
                         )}
                       </div>
                     </td>
@@ -529,18 +518,8 @@ function OrdenTallerPage() {
               <div className="mt-2 flex items-center justify-between">
                 <span className="text-lg font-bold text-green-700">${o.total.toFixed(2)}</span>
                 <div className="flex gap-2 flex-wrap">
-                  <button
-                    onClick={() => abrirEditar(o)}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 text-xs font-medium transition-colors"
-                  >
-                    ✏️ Editar
-                  </button>
-                  <button
-                    onClick={() => descargarPDF(o)}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-gray-50 text-gray-700 hover:bg-gray-100 border border-gray-200 text-xs font-medium transition-colors"
-                  >
-                    📄 PDF
-                  </button>
+                  <button onClick={() => abrirEditar(o)} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 text-xs font-medium transition-colors">✏️ Editar</button>
+                  <button onClick={() => descargarPDF(o)} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-gray-50 text-gray-700 hover:bg-gray-100 border border-gray-200 text-xs font-medium transition-colors">📄 PDF</button>
                   <select
                     value={o.estado}
                     onChange={(e) => cambiarEstado(o.id, e.target.value, o.cita_id)}
@@ -549,12 +528,7 @@ function OrdenTallerPage() {
                     {ESTADOS.map(e => <option key={e} value={e}>{e.replace(/_/g, " ")}</option>)}
                   </select>
                   {o.estado !== "facturada" && (
-                    <button
-                      onClick={() => convertirEnVenta(o)}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 text-xs font-medium transition-colors"
-                    >
-                      🛒 Convertir en venta
-                    </button>
+                    <button onClick={() => convertirEnVenta(o)} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 text-xs font-medium transition-colors">🛒 Convertir en venta</button>
                   )}
                 </div>
               </div>
