@@ -92,7 +92,7 @@ function DevolucionModal({
     if (ventaEfectivo) {
       setMetodoReembolso("efectivo");
     } else {
-      setMetodoReembolso("puntos");
+      setMetodoReembolso("ninguno"); // Predeterminado: no aplicar nada
     }
   }, [venta.metodo_pago]);
 
