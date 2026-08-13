@@ -317,7 +317,7 @@ function CajaModal({ onClose, sucursalId }: { onClose: () => void; sucursalId?: 
             </div>
 
             <div className="grid grid-cols-2 gap-3 mb-4">
-              <div className="bg-green-50 rounded-lg p-3 border border-green-200"><p className="text-xs text-green-700 font-medium">Efectivo (ventas + abonos)</p><p className="text-xl font-bold text-green-800">${cajaData.efectivoVentas.toFixed(2)}</p></div>
+              <div className="bg-green-50 rounded-lg p-3 border border-green-200"><p className="text-xs text-green-700 font-medium">Efectivo bruto recibido</p><p className="text-xl font-bold text-green-800">${cajaData.efectivoVentas.toFixed(2)}</p></div>
               <div className="bg-blue-50 rounded-lg p-3 border border-blue-200"><p className="text-xs text-blue-700 font-medium">Tarjeta</p><p className="text-xl font-bold text-blue-800">${cajaData.tarjeta.toFixed(2)}</p></div>
               <div className="bg-purple-50 rounded-lg p-3 border border-purple-200"><p className="text-xs text-purple-700 font-medium">Transferencia</p><p className="text-xl font-bold text-purple-800">${cajaData.transferencia.toFixed(2)}</p></div>
               <div className="bg-orange-50 rounded-lg p-3 border border-orange-200"><p className="text-xs text-orange-700 font-medium">Crédito (ventas)</p><p className="text-xl font-bold text-orange-800">${cajaData.credito.toFixed(2)}</p></div>
@@ -403,7 +403,6 @@ function PosPage() {
   const procesadosPresupuestos = useRef<Set<string>>(new Set());
   const procesadosOrdenes = useRef<Set<string>>(new Set());
 
-  // Contextos
   const {
     tickets,
     ticketActivoId,
@@ -434,7 +433,6 @@ function PosPage() {
   const { sucursalActiva } = useBranch();
   const sucursalId = sucursalActiva?.id;
 
-  // Estados locales
   const [busqueda, setBusqueda] = useState("");
   const [resultados, setResultados] = useState<Producto[]>([]);
   const [cargando, setCargando] = useState(false);
@@ -471,7 +469,6 @@ function PosPage() {
 
   const PUNTOS_A_PESOS = 10;
 
-  // Bloquear scroll de fondo cuando el modal de caja está abierto
   useEffect(() => {
     if (mostrarModalCaja) {
       document.body.style.overflow = 'hidden';
@@ -483,11 +480,11 @@ function PosPage() {
     };
   }, [mostrarModalCaja]);
 
-  // Cargar métricas del día y categorías
   const cargarMetricas = async () => {
     const { inicio, fin } = obtenerRangoDiaLocal();
     let query = supabase.from("ventas").select("total")
-      .gte("created_at", inicio).lte("created_at", fin);
+      .gte("created_at", inicio).lte("created_at", fin)
+      .neq("estado", "devuelta");
     if (sucursalId) query = query.eq("sucursal_id", sucursalId);
     const { data: ventasHoy } = await query;
     if (ventasHoy) {
@@ -561,7 +558,6 @@ function PosPage() {
         }
       }
 
-      // Limpiar URL después de cargar
       const url = new URL(window.location.href);
       url.searchParams.delete("presupuesto");
       window.history.replaceState({}, "", url.toString());
@@ -617,7 +613,6 @@ function PosPage() {
         }
       }
 
-      // Limpiar URL después de cargar
       const url = new URL(window.location.href);
       url.searchParams.delete("orden_taller");
       url.searchParams.delete("cliente_id");
@@ -760,16 +755,18 @@ function PosPage() {
     };
     let montoRec = undefined, cambioVal = undefined;
     if (metodoSeleccionado === "efectivo") { montoRec = montoRecibido; cambioVal = montoRecibido - total; ventaPayload.monto_recibido = montoRec; ventaPayload.cambio = cambioVal; }
-        // Determinar cliente para la venta
+
+    // Determinar cliente para la venta
     let clienteVenta = clienteSeleccionado;
     if (metodoSeleccionado === "mixto" && pagosMixto.credito > 0) {
-      clienteVenta = pagosMixto.clienteCredito; // El cliente del crédito es el principal
+      clienteVenta = pagosMixto.clienteCredito;
     }
     if (clienteVenta) {
       ventaPayload.cliente_id = clienteVenta;
       ventaPayload.puntos_canjeados = puntosACanjear;
       ventaPayload.puntos_ganados = Math.floor(total / 10);
     }
+
     if (metodoSeleccionado === "mixto") {
       const parciales: PagoParcial[] = [];
       if (pagosMixto.efectivo > 0) parciales.push({ metodo: "efectivo", monto: pagosMixto.efectivo });
@@ -778,6 +775,7 @@ function PosPage() {
       if (pagosMixto.credito > 0) parciales.push({ metodo: "credito", monto: pagosMixto.credito, cliente_id: pagosMixto.clienteCredito });
       ventaPayload.detalle_pago = parciales;
     }
+
     const { data: ventaData, error: ventaError } = await supabase.from("ventas").insert(ventaPayload).select("id, created_at").single();
     if (ventaError) { setMensaje({ tipo: "error", texto: "Error al registrar venta" }); setCobrando(false); return; }
     const ventaId = ventaData.id, fechaVenta = ventaData.created_at;
@@ -794,12 +792,12 @@ function PosPage() {
     }
     const updates = itemsReales.map(item => supabase.from("productos").update({ stock: item.producto.stock - item.cantidad }).eq("id", item.producto.id));
     await Promise.all(updates);
-    if (clienteSeleccionado) {
+    if (clienteVenta) {
       const nuevosPuntos = clientePuntos - puntosACanjear + ventaPayload.puntos_ganados;
-      await supabase.from("clientes").update({ puntos: nuevosPuntos }).eq("id", clienteSeleccionado);
+      await supabase.from("clientes").update({ puntos: nuevosPuntos }).eq("id", clienteVenta);
     }
-    setTicketData({ ventaId, items: [...carrito], total, metodoPago: metodoSeleccionado, montoRecibido: montoRec, cambio: cambioVal, pagosParciales: metodoSeleccionado === "mixto" ? ventaPayload.detalle_pago : undefined, clienteId: clienteSeleccionado || undefined, fecha: fechaVenta, puntosGanados: ventaPayload.puntos_ganados || 0, puntosCanjeados: puntosACanjear, descuentoPuntos, descuentoManual, descuentoManualTipo });
-    if (clienteSeleccionado) { const cli = clientes.find(c => c.id === clienteSeleccionado); setWhatsappNumero(cli?.telefono || ""); } else setWhatsappNumero("");
+    setTicketData({ ventaId, items: [...carrito], total, metodoPago: metodoSeleccionado, montoRecibido: montoRec, cambio: cambioVal, pagosParciales: metodoSeleccionado === "mixto" ? ventaPayload.detalle_pago : undefined, clienteId: clienteVenta || undefined, fecha: fechaVenta, puntosGanados: ventaPayload.puntos_ganados || 0, puntosCanjeados: puntosACanjear, descuentoPuntos, descuentoManual, descuentoManualTipo });
+    if (clienteVenta) { const cli = clientes.find(c => c.id === clienteVenta); setWhatsappNumero(cli?.telefono || ""); } else setWhatsappNumero("");
     vaciarCarrito();
     setCobrando(false);
     cargarMetricas();
@@ -988,7 +986,6 @@ function PosPage() {
     setMostrarProductoComun(false); setProductoComunNombre(""); setProductoComunPrecio("");
   };
 
-  // ================ INTERFAZ ================
   return (
     <div className="flex flex-col lg:flex-row gap-4">
       {/* Columna izquierda */}
@@ -1072,7 +1069,6 @@ function PosPage() {
       {/* Carrito compacto con pestañas de tickets */}
       <div className="lg:w-96 flex flex-col">
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 flex flex-col" style={{ maxHeight: "calc(100vh - 8rem)" }}>
-          {/* Pestañas de tickets */}
           <div className="flex items-center gap-1 mb-2 overflow-x-auto pb-1">
             {tickets.map(ticket => (
               <div
@@ -1264,7 +1260,6 @@ function PosPage() {
                   </div>
                 )}
 
-                {/* Descuento manual */}
                 <div className="mt-2 bg-yellow-50 rounded-lg p-2 border border-yellow-200">
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-yellow-800 font-medium">Descuento:</span>
