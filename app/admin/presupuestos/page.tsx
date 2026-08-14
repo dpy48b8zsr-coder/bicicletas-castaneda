@@ -34,6 +34,8 @@ interface Presupuesto {
   notas: string | null;
   created_at: string;
   clientes: { nombre: string } | null;
+  descuento?: number;
+  descuento_tipo?: string;
 }
 
 export default function PresupuestosPage() {
@@ -52,6 +54,10 @@ export default function PresupuestosPage() {
   const [notas, setNotas] = useState("");
   const [lineas, setLineas] = useState<LineaPresupuesto[]>([]);
   const [guardando, setGuardando] = useState(false);
+
+  // Descuento
+  const [descuento, setDescuento] = useState<number>(0);
+  const [descuentoTipo, setDescuentoTipo] = useState<"porcentaje" | "monto">("monto");
 
   const [busquedaProducto, setBusquedaProducto] = useState("");
   const [resultadosBusqueda, setResultadosBusqueda] = useState<Producto[]>([]);
@@ -105,6 +111,8 @@ export default function PresupuestosPage() {
     setClienteId("");
     setNotas("");
     setLineas([]);
+    setDescuento(0);
+    setDescuentoTipo("monto");
     setMostrarForm(true);
   };
 
@@ -112,6 +120,8 @@ export default function PresupuestosPage() {
     setEditandoId(presupuesto.id);
     setClienteId(presupuesto.cliente_id || "");
     setNotas(presupuesto.notas || "");
+    setDescuento(presupuesto.descuento || 0);
+    setDescuentoTipo((presupuesto.descuento_tipo as "porcentaje" | "monto") || "monto");
     const { data: lineasData } = await supabase
       .from("detalle_presupuesto")
       .select("*")
@@ -156,7 +166,11 @@ export default function PresupuestosPage() {
     setLineas(lineas.filter((_, i) => i !== index));
   };
 
-  const totalPresupuesto = lineas.reduce((sum, l) => sum + l.cantidad * l.precio_unitario, 0);
+  const totalLineas = lineas.reduce((sum, l) => sum + l.cantidad * l.precio_unitario, 0);
+  const montoDescuento = descuentoTipo === "porcentaje"
+    ? (totalLineas * descuento) / 100
+    : descuento;
+  const totalPresupuesto = totalLineas - montoDescuento;
 
   const guardarPresupuesto = async () => {
     if (!clienteId) { alert("Selecciona un cliente."); return; }
@@ -167,6 +181,8 @@ export default function PresupuestosPage() {
       cliente_id: clienteId,
       total: totalPresupuesto,
       notas: notas.trim() || null,
+      descuento: descuento,
+      descuento_tipo: descuentoTipo,
       sucursal_id: sucursalId,
     };
 
@@ -239,7 +255,7 @@ export default function PresupuestosPage() {
             <p><strong>Cliente:</strong> ${nombreCliente}</p>
             <p><strong>Estado:</strong> ${presupuesto.estado}</p>
             ${presupuesto.notas ? `<p><strong>Notas:</strong> ${presupuesto.notas}</p>` : ""}
-            
+
             <h3 style="margin-top: 15px;">Conceptos</h3>
             <table style="width: 100%; border-collapse: collapse; margin-bottom: 15px;">
               <thead>
@@ -261,6 +277,11 @@ export default function PresupuestosPage() {
                 `).join("")}
               </tbody>
             </table>
+            ${presupuesto.descuento > 0 ? `
+            <div style="display: flex; justify-content: space-between; font-size: 12px; padding: 2px 0;">
+              <span>Descuento (${presupuesto.descuento_tipo === "porcentaje" ? presupuesto.descuento + "%" : "$" + presupuesto.descuento.toFixed(2)})</span>
+              <span>-$${presupuesto.descuento_tipo === "porcentaje" ? ((totalLineas * presupuesto.descuento) / 100).toFixed(2) : presupuesto.descuento.toFixed(2)}</span>
+            </div>` : ""}
             <p style="text-align: right; font-weight: bold; font-size: 16px;">Total: $${presupuesto.total.toFixed(2)}</p>
           </div>
         </body>
@@ -287,15 +308,15 @@ export default function PresupuestosPage() {
 
     const lineas = lineasData || [];
     const nombreCliente = presupuesto.clientes?.nombre || "No asignado";
-    
+
     const { data: clienteData } = await supabase
       .from("clientes")
       .select("telefono")
       .eq("id", presupuesto.cliente_id)
       .single();
-    
+
     const telefonoCliente = clienteData?.telefono;
-    
+
     if (!telefonoCliente) {
       alert("El cliente no tiene teléfono registrado.");
       return;
@@ -314,11 +335,18 @@ export default function PresupuestosPage() {
     mensaje += `Cliente: ${nombreCliente}\n`;
     mensaje += `Estado: ${presupuesto.estado}\n\n`;
     mensaje += `*Conceptos:*\n`;
-    
+
     lineas.forEach((l: any) => {
       mensaje += `- ${l.descripcion || "Sin descripción"} x${l.cantidad}: $${(l.cantidad * l.precio_unitario).toFixed(2)}\n`;
     });
-    
+
+    if (presupuesto.descuento > 0) {
+      const montoDesc = presupuesto.descuento_tipo === "porcentaje"
+        ? ((totalLineas * presupuesto.descuento) / 100)
+        : presupuesto.descuento;
+      mensaje += `\n*Descuento (${presupuesto.descuento_tipo === "porcentaje" ? presupuesto.descuento + "%" : "$" + presupuesto.descuento.toFixed(2)}):* -$${montoDesc.toFixed(2)}\n`;
+    }
+
     mensaje += `\n*Total: $${presupuesto.total.toFixed(2)}*\n`;
     if (presupuesto.notas) mensaje += `\nNotas: ${presupuesto.notas}\n`;
     mensaje += `\n¡Gracias por confiar en Bicicletas Castañeda! 🚲`;
@@ -405,7 +433,11 @@ export default function PresupuestosPage() {
                   <h3 className="font-semibold text-gray-900">{p.clientes?.nombre || "Sin cliente"}</h3>
                   <p className="text-xs text-gray-500">{new Date(p.created_at).toLocaleDateString("es-MX")}</p>
                 </div>
-                <span className={`text-xs px-2 py-1 rounded-full font-medium ${p.estado === "pendiente" ? "bg-yellow-100 text-yellow-900" : p.estado === "aprobado" ? "bg-green-100 text-green-900" : "bg-red-100 text-red-900"}`}>{p.estado}</span>
+                <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+                  p.estado === "pendiente" ? "bg-yellow-100 text-yellow-900" :
+                  p.estado === "aprobado" ? "bg-green-100 text-green-900" :
+                  "bg-red-100 text-red-900"
+                }`}>{p.estado}</span>
               </div>
               <div className="mt-2 flex items-center justify-between">
                 <span className="text-lg font-bold text-green-700">${p.total.toFixed(2)}</span>
@@ -472,6 +504,35 @@ export default function PresupuestosPage() {
                 ))}
               </div>
             </div>
+
+            {/* Descuento general */}
+            <div className="bg-yellow-50 rounded-lg p-3 mb-4 border border-yellow-200">
+              <label className="block text-sm font-semibold text-gray-900 mb-2">Descuento general</label>
+              <div className="flex items-center gap-2">
+                <select
+                  value={descuentoTipo}
+                  onChange={(e) => setDescuentoTipo(e.target.value as "porcentaje" | "monto")}
+                  className="text-sm border border-gray-300 rounded-lg px-2 py-2 bg-white text-gray-900 w-16"
+                >
+                  <option value="monto">$</option>
+                  <option value="porcentaje">%</option>
+                </select>
+                <input
+                  type="number"
+                  min="0"
+                  value={descuento || ""}
+                  onChange={(e) => setDescuento(parseFloat(e.target.value) || 0)}
+                  className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900"
+                  placeholder="0"
+                />
+              </div>
+              {descuento > 0 && (
+                <p className="text-xs text-yellow-700 mt-1">
+                  Descuento: -${montoDescuento.toFixed(2)}
+                </p>
+              )}
+            </div>
+
             <div className="flex justify-between items-center bg-gray-100 rounded-lg p-3 mb-4">
               <span className="text-sm font-semibold text-gray-900">Total</span>
               <span className="text-xl font-bold text-green-700">${totalPresupuesto.toFixed(2)}</span>

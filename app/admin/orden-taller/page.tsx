@@ -42,6 +42,8 @@ interface Orden {
   notas: string | null;
   created_at: string;
   clientes: { nombre: string } | null;
+  descuento?: number;
+  descuento_tipo?: string;
 }
 
 const ESTADOS = ["pendiente", "en_proceso", "lista_para_entrega", "entregada", "facturada"];
@@ -79,6 +81,10 @@ function OrdenTallerPage() {
   const [notas, setNotas] = useState("");
   const [lineas, setLineas] = useState<LineaOrden[]>([]);
   const [guardando, setGuardando] = useState(false);
+
+  // Descuento
+  const [descuento, setDescuento] = useState<number>(0);
+  const [descuentoTipo, setDescuentoTipo] = useState<"porcentaje" | "monto">("monto");
 
   const [busquedaProducto, setBusquedaProducto] = useState("");
   const [resultadosBusqueda, setResultadosBusqueda] = useState<ProductoInventario[]>([]);
@@ -173,6 +179,8 @@ function OrdenTallerPage() {
     setEstado("pendiente");
     setNotas("");
     setLineas([]);
+    setDescuento(0);
+    setDescuentoTipo("monto");
     setMostrarNuevoCliente(false);
     setNuevoNombreCliente("");
     setNuevoTelefonoCliente("");
@@ -185,6 +193,8 @@ function OrdenTallerPage() {
     setCitaId(orden.cita_id || "");
     setEstado(orden.estado);
     setNotas(orden.notas || "");
+    setDescuento(orden.descuento || 0);
+    setDescuentoTipo((orden.descuento_tipo as "porcentaje" | "monto") || "monto");
     setMostrarNuevoCliente(false);
     setNuevoNombreCliente("");
     setNuevoTelefonoCliente("");
@@ -259,7 +269,11 @@ function OrdenTallerPage() {
     setLineas(lineas.filter((_, i) => i !== index));
   };
 
-  const totalOrden = lineas.reduce((sum, l) => sum + l.cantidad * l.precio_unitario, 0);
+  const totalLineas = lineas.reduce((sum, l) => sum + l.cantidad * l.precio_unitario, 0);
+  const montoDescuento = descuentoTipo === "porcentaje"
+    ? (totalLineas * descuento) / 100
+    : descuento;
+  const totalOrden = totalLineas - montoDescuento;
 
   const guardarOrden = async () => {
     if (!clienteId) { alert("Selecciona un cliente."); return; }
@@ -271,6 +285,8 @@ function OrdenTallerPage() {
       estado: estado,
       total: totalOrden,
       notas: notas.trim() || null,
+      descuento: descuento,
+      descuento_tipo: descuentoTipo,
       sucursal_id: sucursalId,
     };
 
@@ -379,6 +395,11 @@ function OrdenTallerPage() {
             `).join("")}
           </tbody>
         </table>
+        ${orden.descuento > 0 ? `
+        <div style="display: flex; justify-content: space-between; font-size: 12px; padding: 2px 0;">
+          <span>Descuento (${orden.descuento_tipo === "porcentaje" ? orden.descuento + "%" : "$" + orden.descuento.toFixed(2)})</span>
+          <span>-$${orden.descuento_tipo === "porcentaje" ? ((totalLineas * orden.descuento) / 100).toFixed(2) : orden.descuento.toFixed(2)}</span>
+        </div>` : ""}
         <p style="text-align: right; font-weight: bold; font-size: 16px;">Total: $${orden.total.toFixed(2)}</p>
 
         <div style="margin-top: 30px;">
@@ -429,6 +450,81 @@ function OrdenTallerPage() {
     URL.revokeObjectURL(url);
   };
 
+  const descargarPresupuestoPDF = async (orden: Orden) => {
+    const { data: lineasData } = await supabase
+      .from("detalle_orden_taller")
+      .select("*")
+      .eq("orden_id", orden.id);
+
+    const lineas = lineasData || [];
+    const fecha = new Date(orden.created_at).toLocaleDateString("es-MX", {
+      year: "numeric", month: "long", day: "numeric",
+    });
+
+    const nombreCliente = orden.clientes?.nombre || "No asignado";
+
+    const html = `
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <title>Presupuesto #${orden.id.slice(0, 8)}</title>
+          <style>
+            body { font-family: Arial, sans-serif; margin: 20px; }
+            @media print { body { margin: 0; } }
+          </style>
+        </head>
+        <body>
+          <div style="border: 1px solid #000; padding: 15px;">
+            <h2 style="text-align: center;">Bicicletas Castañeda</h2>
+            <p style="text-align: center;">Presupuesto</p>
+            <p><strong>Nº:</strong> ${orden.id.slice(0, 8)}</p>
+            <p><strong>Fecha:</strong> ${fecha}</p>
+            <p><strong>Cliente:</strong> ${nombreCliente}</p>
+            ${orden.notas ? `<p><strong>Notas:</strong> ${orden.notas}</p>` : ""}
+
+            <h3 style="margin-top: 15px;">Conceptos</h3>
+            <table style="width: 100%; border-collapse: collapse; margin-bottom: 15px;">
+              <thead>
+                <tr style="background: #f0f0f0;">
+                  <th style="border: 1px solid #000; padding: 5px; text-align: left;">Descripción</th>
+                  <th style="border: 1px solid #000; padding: 5px; text-align: center;">Cant.</th>
+                  <th style="border: 1px solid #000; padding: 5px; text-align: right;">P.Unit.</th>
+                  <th style="border: 1px solid #000; padding: 5px; text-align: right;">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${lineas.map((l: any) => `
+                  <tr>
+                    <td style="border: 1px solid #000; padding: 5px;">${l.descripcion || "—"}</td>
+                    <td style="border: 1px solid #000; padding: 5px; text-align: center;">${l.cantidad}</td>
+                    <td style="border: 1px solid #000; padding: 5px; text-align: right;">$${l.precio_unitario.toFixed(2)}</td>
+                    <td style="border: 1px solid #000; padding: 5px; text-align: right;">$${(l.cantidad * l.precio_unitario).toFixed(2)}</td>
+                  </tr>
+                `).join("")}
+              </tbody>
+            </table>
+            ${orden.descuento > 0 ? `
+            <div style="display: flex; justify-content: space-between; font-size: 12px; padding: 2px 0;">
+              <span>Descuento (${orden.descuento_tipo === "porcentaje" ? orden.descuento + "%" : "$" + orden.descuento.toFixed(2)})</span>
+              <span>-$${orden.descuento_tipo === "porcentaje" ? ((totalLineas * orden.descuento) / 100).toFixed(2) : orden.descuento.toFixed(2)}</span>
+            </div>` : ""}
+            <p style="text-align: right; font-weight: bold; font-size: 16px;">Total: $${orden.total.toFixed(2)}</p>
+          </div>
+        </body>
+      </html>
+    `;
+
+    const blob = new Blob([html], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `Presupuesto_${orden.id.slice(0, 8)}.html`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -473,6 +569,7 @@ function OrdenTallerPage() {
                       <div className="flex gap-2 flex-wrap">
                         <button onClick={() => abrirEditar(o)} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 text-xs font-medium transition-colors">✏️ Editar</button>
                         <button onClick={() => descargarPDF(o)} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-gray-50 text-gray-700 hover:bg-gray-100 border border-gray-200 text-xs font-medium transition-colors">📄 PDF</button>
+                        <button onClick={() => descargarPresupuestoPDF(o)} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 text-xs font-medium transition-colors">📄 Presupuesto</button>
                         <select
                           value={o.estado}
                           onChange={(e) => cambiarEstado(o.id, e.target.value, o.cita_id)}
@@ -520,6 +617,7 @@ function OrdenTallerPage() {
                 <div className="flex gap-2 flex-wrap">
                   <button onClick={() => abrirEditar(o)} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 text-xs font-medium transition-colors">✏️ Editar</button>
                   <button onClick={() => descargarPDF(o)} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-gray-50 text-gray-700 hover:bg-gray-100 border border-gray-200 text-xs font-medium transition-colors">📄 PDF</button>
+                  <button onClick={() => descargarPresupuestoPDF(o)} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 text-xs font-medium transition-colors">📄 Presupuesto</button>
                   <select
                     value={o.estado}
                     onChange={(e) => cambiarEstado(o.id, e.target.value, o.cita_id)}
@@ -614,6 +712,33 @@ function OrdenTallerPage() {
                   </div>
                 ))}
               </div>
+            </div>
+
+            <div className="bg-yellow-50 rounded-lg p-3 mb-4 border border-yellow-200">
+              <label className="block text-sm font-semibold text-gray-900 mb-2">Descuento general</label>
+              <div className="flex items-center gap-2">
+                <select
+                  value={descuentoTipo}
+                  onChange={(e) => setDescuentoTipo(e.target.value as "porcentaje" | "monto")}
+                  className="text-sm border border-gray-300 rounded-lg px-2 py-2 bg-white text-gray-900 w-16"
+                >
+                  <option value="monto">$</option>
+                  <option value="porcentaje">%</option>
+                </select>
+                <input
+                  type="number"
+                  min="0"
+                  value={descuento || ""}
+                  onChange={(e) => setDescuento(parseFloat(e.target.value) || 0)}
+                  className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900"
+                  placeholder="0"
+                />
+              </div>
+              {descuento > 0 && (
+                <p className="text-xs text-yellow-700 mt-1">
+                  Descuento: -${montoDescuento.toFixed(2)}
+                </p>
+              )}
             </div>
 
             <div className="flex justify-between items-center bg-gray-100 rounded-lg p-3 mb-4">
